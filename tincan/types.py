@@ -347,6 +347,9 @@ class Grant:
 
 @dataclass(frozen=True)
 class Inbox:
+    """unread is every line after pos addressed to me. advance reads it. The views are derived."""
+
+    unread: tuple[Event, ...]
     speech: tuple[Speech, ...]
     tasks: tuple[Task, ...]
     actionable: tuple[Task, ...]
