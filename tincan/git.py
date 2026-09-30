@@ -143,7 +143,19 @@ def commit_owned(root: Path, paths: list[Path], message: str, author: GitAuthor)
 
 
 def push(root: Path) -> None:
-    raise NotImplementedError
+    require_repo(root)
+    if _upstream(root):
+        run = _run(root, "push")
+    else:
+        branch = _head_branch(root)
+        if not branch:
+            raise ProtocolError("HEAD is detached; cannot push")
+        remote = _remote(root)
+        if not remote:
+            raise ProtocolError("no git remote; cannot push")
+        run = _run(root, "push", "--set-upstream", remote, branch)
+    if run.returncode != 0:
+        raise ConflictError(_why(run))
 
 
 def author_of_line(root: Path, path: Path, seq: Seq) -> GitAuthor:
