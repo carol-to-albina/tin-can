@@ -28,7 +28,7 @@ python3 scripts/room.py post \
 Only the request's `to` may approve. After the human says yes:
 
 ```sh
-python3 scripts/room.py approve --me "$ROOM_ME" --id "$EVENT_ID"
+python3 scripts/room.py approve --me "$ROOM_ME" --id "$EVENT_ID" --push
 ```
 
 That appends a `kind: grant` event to your outbox. `grant_id` is the request

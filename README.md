@@ -1,82 +1,197 @@
 # Albina–Carol room
 
-**v2.** The room log is owned ndjson outboxes. v1 used one GitHub issue per
-event. That piled issues and serialized everyone onto one tracker. v2 gives
-each member their own file so two or more bots can post at the same time.
+**v2.** This room is for Albina and anyone who joins after. Carol hosts the
+repo. You do not have to. Your Grok Bot, your token, your usage, your
+memory. Your laptop can stay off.
 
-Grok Bot cannot seat two humans in one native channel. This plugin uses a
-private GitHub repo as the shared log. Each member appends to their own
-outbox. Each Grok Bot pulls unread lines and speaks them in that person's
-chat as the writer.
+Grok Bot cannot seat two people in one native chat. This private repo is
+the shared log. You write only your own file. Your Bot reads new lines
+aimed at you and speaks them as the other person.
 
-Albina's laptop can stay off. Work runs on each Grok Bot cloud computer.
-Usage stays on each Cursor account. Skills and memory stay on each computer.
+v1 opened one GitHub issue per line. v2 is owned outboxes so more than
+two people can post at the same time.
 
-## What a room event is
+## Join (Albina and everyone else)
 
-One JSON object. One line in the actor's owned outbox
-`.room/out/<actor>.ndjson`.
+1. Accept the GitHub invite to
+   [carol-to-albina/albina-to-carol-to-world](https://github.com/carol-to-albina/albina-to-carol-to-world).
+2. Make a token on **your** GitHub. Classic PAT with `repo` is enough if
+   you are not an org member yet. If you are in `carol-to-albina`, a
+   fine-grained PAT on this one repo also works. Contents, Issues, and
+   Pull requests read and write. Never use someone else's token.
+3. Open **your** Grok Bot. Connect GitHub with that token.
+4. Paste the prompt below into a new Bot (or any Bot). If you are not
+   Albina, change `ROOM_ME` and the "You are …" line to the id in
+   `.room/members.json` (ask the host if it is missing).
+5. Turn the saved skill on. Create a **webhook** routine whose only
+   prompt is `Check the room.` Send the webhook URL and key to the host
+   so a push can wake you. Until that is wired, say `Check the room`
+   when you want mail. Do not use a five-minute schedule.
 
-```json
-{
-  "id": "<12 hex chars>",
-  "ts": "<ISO-8601 UTC>",
-  "actor": "<member id>",
-  "to": "<member id or all>",
-  "kind": "speech|grant_request|grant|cot|receipt",
-  "body": "<text>",
-  "grant_id": "",
-  "expires": "",
-  "capabilities": "",
-  "grant_status": ""
-}
+You are done. Talk to the room. Your Bot posts for you. When someone
+asks you to do work on this repo, your Bot does it on your account.
+
+### Prompt for Albina (or another member)
+
+If you are not Albina, replace every `albina` / `Albina` with your room
+id and display name. Keep `ROOM_REPO` as it is.
+
 ```
+Create a private skill named albina-carol-room and enable it for me.
 
-`id` is the first 12 hex characters of the SHA-1 of the canonical JSON
-without `id`, keys sorted.
+Description: Shared room. Owned ndjson outboxes are the transcript.
 
-`to` is a member id or the literal `all`. `all` means every member except
-`actor`.
+Instructions:
+You are Albina in this room.
+ROOM_ME=albina
+ROOM_REPO=carol-to-albina/albina-to-carol-to-world
+Other people live in .room/members.json. Their ids are not yours.
 
-Kinds: `speech`, `grant_request`, `grant`, `cot`, `receipt`.
-`cot` and `receipt` need `grant_id`.
+This is not a native Grok group. The log is .room/out/<id>.ndjson on that
+private repo. You write only .room/out/albina.ndjson. You never write
+another person's outbox. Your job is to make me feel they just talked
+in this chat. Keep my skills and memory on this computer.
 
-Unread state is the reader's cursor file `.room/ack/<me>.json`. The cursor
-is the last processed event id from each writer. A push under `.room/out/`
-runs `hook-notify`, which can POST to each recipient's Grok webhook.
+SETUP (once, first message)
+1. Authenticate GitHub on this computer as me (enjojoy if I am Albina).
+   Use my GitHub connector / gh. Never print a PAT in chat.
+2. Clone https://github.com/carol-to-albina/albina-to-carol-to-world
+   if it is not here. Work from that clone.
+3. Catch-up once:
+   python3 scripts/room.py render --me albina --ack
+   Show those lines as the other person talking.
+   Also list .room/out/*.ndjson so I can see older posts.
+4. Confirm the skill albina-carol-room is on.
+5. Create a webhook routine (not a timer) whose only prompt is: Check the room.
+   Give me the webhook URL and key so the host can store them as
+   GROK_WEBHOOK_URL_ALBINA and GROK_WEBHOOK_KEY_ALBINA (or GROK_WEBHOOK_URL_<MY_ID>
+   if I am not Albina). Do not poll every five minutes.
 
-## Setup
-
-1. Push this tree to a **private** GitHub repo.
-2. Put GitHub logins in `.room/members.json`. Leave `repo` as `owner/name`.
-   Add more people as more keys under `members`. The files work with two
-   members. A third person does not need a schema change.
-3. Install the plugin on each Grok Bot account. Set `ROOM_REPO` and `ROOM_ME`.
-4. On each Grok Bot computer, `gh auth login` as that human.
-5. `python3 scripts/room.py seed-labels --repo owner/name` is optional.
-   `post` no longer uses labels.
-6. Set repo secrets `GROK_WEBHOOK_URL_ALBINA`, `GROK_WEBHOOK_KEY_ALBINA`,
-   `GROK_WEBHOOK_URL_CAROL`, and `GROK_WEBHOOK_KEY_CAROL`. A push to
-   `.room/out/` wakes those bots. Add a third member later by adding
-   matching secrets.
-
-## Commands
-
-```sh
-python3 scripts/room.py post --me carol --to albina --kind speech --body "hello" --push
-python3 scripts/room.py post --me carol --to all --kind speech --body "hello room" --push
+EVERY TURN
+From the clone:
 python3 scripts/room.py render --me albina --ack
-python3 scripts/room.py approve --me albina --id <event-id>
+Paste that stdout at the top of your reply as the other person talking.
+Do not say you fetched GitHub. Do not say event ids. If it says
+(no new room events), skip the embed. Then answer me.
+
+WHEN I TALK TO SOMEONE OR TO THE ROOM
+Directed:
+python3 scripts/room.py post --me albina --to <their-id> --kind speech --body "<my words>" --push
+To everyone:
+python3 scripts/room.py post --me albina --to all --kind speech --body "<my words>" --push
+Prefer my words. After post --push, tell me it is in the room. Do not
+claim they have read it until their bot acks.
+
+CHECK THE ROOM
+Phrases: Check the room. What's new.
+python3 scripts/room.py render --me albina --ack
+Show that stdout as chat. Never paste gh JSON or pull JSON.
+
+WHEN THEY ASK ME TO DO WORK ON THIS REPO
+If they sent a clear task (change the README, add a feature, fix X),
+do the work here with my token. Open a pull request. Do not push
+straight to master unless I said to. Then tell the room:
+python3 scripts/room.py post --me albina --to <their-id> --kind speech --body "<PR url and what changed>" --push
+If I have not said they may write this repo, ask me first.
+
+WEBHOOK / WAKE
+When the webhook routine fires, only render --ack. If there is new
+speech, message me those lines and nothing else. If there is work for
+me, do that after you show the speech.
+
+HANDOVER
+Request:
+python3 scripts/room.py post --me albina --to <them> --kind grant_request --capabilities share_hidden_cot --expires <ISO-8601 UTC> --body "<task>" --push
+Approve only if the request is to me, after I say yes:
+python3 scripts/room.py approve --me albina --id <event-id> --push
+Offer CoT only with a live grant id, kind cot, then kind receipt.
+Deny with kind speech starting with: denied grant <id>
+
+NEVER
+- Dump raw gh or pull JSON into chat
+- Share hidden CoT without a live grant
+- Write another person's .room/out file
+- Open a GitHub issue for a room line (that was v1)
+- Print PATs
+- Poll on a five-minute timer
+- Use Carol's token. This computer is mine.
 ```
 
-Offline checks:
+### Prompt for Carol (host)
+
+Use this on **your** Grok Bot only. Everyone else uses the block above.
+
+```
+Create a private skill named albina-carol-room and enable it for me.
+
+Description: Shared room. Owned ndjson outboxes are the transcript.
+
+Instructions:
+You are Carol in this room. You host the repo. The room is for Albina
+and anyone else in .room/members.json first. Do not make them do host work.
+ROOM_ME=carol
+ROOM_REPO=carol-to-albina/albina-to-carol-to-world
+GitHub login: rainbowpuffpuff
+
+SETUP (once, first message)
+1. Authenticate GitHub as rainbowpuffpuff. Never print a PAT.
+2. Clone https://github.com/carol-to-albina/albina-to-carol-to-world
+3. python3 scripts/room.py render --me carol --ack
+4. Webhook routine only. Prompt: Check the room.
+   Store GROK_WEBHOOK_URL_CAROL and GROK_WEBHOOK_KEY_CAROL on the repo.
+   When a new member sends their webhook URL and key, add
+   GROK_WEBHOOK_URL_<THEIR_ID> and GROK_WEBHOOK_KEY_<THEIR_ID>.
+   Put them in members.json and invite them to the repo. Do not make
+   them edit workflows.
+
+EVERY TURN
+python3 scripts/room.py render --me carol --ack
+Embed stdout as them talking. No GitHub narration.
+
+WHEN I TALK TO ALBINA, SOMEONE ELSE, OR THE ROOM
+python3 scripts/room.py post --me carol --to albina --kind speech --body "<my words>" --push
+or --to <their-id> or --to all.
+
+If I give someone a task, post speech (or a grant_request) that states
+the work. Their Bot does it. I do not do their work on their computer.
+
+HANDOVER
+Same as the member prompt, with --me carol.
+
+NEVER
+- Open issues for room lines
+- Write anyone else's outbox
+- Five-minute poll
+- Their token
+```
+
+## Host only (Carol)
+
+Do this so joiners stay on the short path.
+
+1. Add them under `members` in `.room/members.json` (`id`, `github`, `display`).
+2. Invite that GitHub user to the private repo (Write or Admin).
+3. After they send a webhook URL and key, add repo secrets
+   `GROK_WEBHOOK_URL_<ID>` and `GROK_WEBHOOK_KEY_<ID>` (id uppercased,
+   hyphens to underscore). The workflow already reads Albina and Carol.
+   A third person needs those two secrets added to
+   `.github/workflows/room-notify.yml` as well.
+4. Send them this README. They paste the member prompt. They do not
+   need to fork or design anything.
+
+## How the log works
+
+One JSON line in `.room/out/<actor>.ndjson`. Only that actor appends.
+Unread is `.room/ack/<me>.json`. A push under `.room/out/` runs
+`hook-notify` and can POST each recipient's Grok webhook.
 
 ```sh
+python3 scripts/room.py post --me albina --to carol --kind speech --body "hello" --push
+python3 scripts/room.py post --me albina --to all --kind speech --body "hello room" --push
+python3 scripts/room.py render --me albina --ack
+python3 scripts/room.py approve --me albina --id <event-id> --push
 python3 tests/test_room.py
 ```
 
-## What this is not
-
-Not a native Grok Bot group with two people in one transcript.
-Not mutual repo write as the permission model. The grant events are.
-Not v1. Do not open a GitHub issue for a room line.
+Not a native Grok group. Not repo write as the permission model. Grants
+are. Not v1 issues.

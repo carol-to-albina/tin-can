@@ -563,7 +563,9 @@ def cmd_approve(args: argparse.Namespace) -> None:
         grant_id=eid,
         grant_status="live",
     )
-    append_outbox(me, ev)
+    path = append_outbox(me, ev)
+    if args.push:
+        git_push_outbox(path, f"room: {me} grant")
     print(json.dumps(ev, indent=2))
 
 
@@ -661,6 +663,7 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--id", default="")
     ap.add_argument("--issue", default="")
     ap.add_argument("--repo", default="")
+    ap.add_argument("--push", action="store_true")
     ap.set_defaults(fn=cmd_approve)
 
     hk = sub.add_parser("hook-notify", help="Actions: list push recipients and POST webhooks")
