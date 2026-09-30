@@ -66,14 +66,21 @@ def _tracked(root: Path, spec: str) -> bool:
     return _run(root, "ls-files", "--error-unmatch", "--", spec).returncode == 0
 
 
+def _read(path: Path) -> str:
+    try:
+        return path.read_text()
+    except OSError:
+        return ""
+
+
+def _nonblank(text: str) -> int:
+    return sum(1 for raw in text.splitlines() if raw.strip())
+
+
 def _line_of_seq(path: Path, seq: Seq) -> int:
     """The 1-based file line holding that seq. Blank lines do not consume seq."""
-    try:
-        text = path.read_text()
-    except OSError:
-        return 0
     seen = 0
-    for number, raw in enumerate(text.splitlines(), start=1):
+    for number, raw in enumerate(_read(path).splitlines(), start=1):
         if not raw.strip():
             continue
         seen += 1
@@ -202,6 +209,26 @@ def author_of_line(root: Path, path: Path, seq: Seq) -> GitAuthor:
     if run.returncode != 0:
         return UNCOMMITTED
     return _porcelain_author(run.stdout)
+
+
+def added_since(root: Path, path: Path, before_rev: str) -> list[int]:
+    """The seqs in the working file that before_rev did not carry.
+
+    seq is the non-blank line index, so every index past the count at that
+    revision is new. An empty or all-zero rev is a first push where the whole
+    file is new.
+    """
+    require_repo(root)
+    spec = _pathspec(root, path)
+    rev = (before_rev or "").strip()
+    before = 0
+    if rev and set(rev) != {"0"}:
+        known = _run(root, "rev-parse", "--verify", "--quiet", f"{rev}^{{commit}}")
+        if known.returncode != 0:
+            raise ProtocolError(f"unknown revision {rev}")
+        shown = _run(root, "show", f"{rev}:./{spec}")
+        before = _nonblank(shown.stdout) if shown.returncode == 0 else 0
+    return list(range(before + 1, _nonblank(_read(root / spec)) + 1))
 
 
 def remote_url(root: Path) -> str:
