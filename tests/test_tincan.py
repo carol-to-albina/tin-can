@@ -6,11 +6,13 @@ import os
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-ROOM = ROOT / "scripts" / "room.py"
+ROOM = ROOT / "scripts" / "tincan.py"
 
 
 def run(
@@ -126,18 +128,43 @@ task T until 16:00
         self.assertTrue(member_pact.startswith("ROOM PACT"))
         self.assertNotIn("If I have not said they may write this repo", member)
         self.assertNotIn("If I have not said they may write this repo", host)
-        self.assertNotIn("scripts/room.py pact", text)
+        self.assertNotIn("scripts/webhookup.py", text)
+        self.assertNotIn("webhookup", text)
+        self.assertNotIn("named webhookup", member_fence)
+        self.assertNotIn("named webhookup", host_fence)
         self.assertIn("Ask me to re-confirm ROOM PACT", member)
         self.assertIn("Ask me to re-confirm ROOM PACT", host)
         self.assertIn("--kind task", member_fence)
         self.assertIn("--kind task", host_fence)
-        self.assertIn("scripts/room.py sync", member_fence)
-        self.assertIn("scripts/room.py sync", host_fence)
+        self.assertIn("scripts/tincan.py sync", member_fence)
+        self.assertIn("scripts/tincan.py sync", host_fence)
         self.assertIn("[task]", member_pact)
         self.assertIn("--ack-tasks", member_fence)
         self.assertIn("checkout master", member_fence)
         self.assertNotIn("only render --ack", member_fence)
         self.assertNotIn("If I give someone a task, post speech", host_fence)
+        self.assertIn("named tincan", member_fence)
+        self.assertIn("named tincan", host_fence)
+        self.assertNotIn("albina-carol-room", text)
+        self.assertNotIn("albina-to-carol-to-world", text)
+        self.assertNotIn("scripts/room.py", text)
+        self.assertIn("Present a Grok Bot secure secret request", member_fence)
+        self.assertIn("Present a Grok Bot secure secret request", host_fence)
+        self.assertIn("masked field", member_fence)
+        self.assertIn("masked field", host_fence)
+        self.assertNotIn("Authenticate GitHub as rainbowpuffpuff", host_fence)
+        self.assertNotIn("enjojoy", member_fence)
+        self.assertNotIn("rainbowpuffpuff", host_fence)
+        self.assertNotIn("Offer choices", member_fence)
+        self.assertNotIn("Offer choices", host_fence)
+        self.assertIn("Do not present another secure secret request", member_fence)
+        self.assertIn("Do not present another secure secret request", host_fence)
+        self.assertIn("Do not ask me for those values", member_fence)
+        self.assertIn("Do not ask me for those values", host_fence)
+        self.assertIn("hook-set --me albina", member_fence)
+        self.assertIn("hook-set --me carol", host_fence)
+        self.assertNotIn("gh secret set", member_fence)
+        self.assertNotIn("gh secret set", host_fence)
 
     def test_validate_task(self) -> None:
         ev = """---
@@ -168,10 +195,20 @@ make posters about tunnelling
         self.assertEqual(p.stdout.strip(), "**Carol:** [task] make posters about tunnelling")
 
     def test_workflow_push_only_with_history(self) -> None:
-        text = (ROOT / ".github" / "workflows" / "room-notify.yml").read_text(encoding="utf-8")
+        text = (ROOT / ".github" / "workflows" / "tincan-notify.yml").read_text(encoding="utf-8")
         self.assertIn("fetch-depth: 0", text)
         self.assertNotIn("\n  issues:", text)
         self.assertNotIn("pull_request:", text)
+
+    def test_product_is_tincan(self) -> None:
+        plugin = json.loads((ROOT / "plugin.json").read_text(encoding="utf-8"))
+        members = json.loads((ROOT / ".room" / "members.json").read_text(encoding="utf-8"))
+        self.assertEqual(plugin["name"], "tincan")
+        self.assertEqual(members["repo"], "carol-to-albina/tincan")
+        self.assertEqual(members["room"], "tincan")
+        self.assertTrue((ROOT / "scripts" / "tincan.py").is_file())
+        self.assertFalse((ROOT / "scripts" / "webhookup.py").exists())
+        self.assertFalse((ROOT / "scripts" / "room.py").exists())
 
     def test_validate_file(self) -> None:
         text = """---
@@ -378,6 +415,99 @@ class OutboxRoomTests(unittest.TestCase):
         self.assertIn("checkout master", p.stderr)
 
     def test_hook_notify_push_lists_directed_recipient(self) -> None:
+        first, second, p = self._notify_carol_to_albina()
+        data = json.loads(p.stdout)
+        self.assertEqual(data["recipients"], ["albina"])
+        self.assertEqual(data["events"]["albina"], [second["id"]])
+        self.assertNotIn(first["id"], data["events"]["albina"])
+
+    def test_hook_set_writes_owned_file(self) -> None:
+        p = self.ok(
+            [
+                "hook-set",
+                "--me",
+                "albina",
+                "--url",
+                "https://example.test/hook",
+                "--key",
+                "secret-key",
+            ]
+        )
+        data = json.loads(p.stdout)
+        path = self.root / ".room" / "hook" / "albina.json"
+        self.assertEqual(data["me"], "albina")
+        self.assertEqual(data["url"], "https://example.test/hook")
+        self.assertEqual(data["path"], str(path))
+        self.assertNotIn("secret-key", p.stdout)
+        stored = json.loads(path.read_text(encoding="utf-8"))
+        self.assertEqual(stored, {"url": "https://example.test/hook", "key": "secret-key"})
+
+    def test_hook_set_needs_url_and_key(self) -> None:
+        p = self.room(["hook-set", "--me", "albina", "--url", "", "--key", "k"])
+        self.assertNotEqual(p.returncode, 0)
+        self.assertIn("hook-set", p.stderr)
+
+    def test_hook_set_push_refuses_other_branch(self) -> None:
+        self._git(["init"])
+        self._git(["-c", "user.email=t@t", "-c", "user.name=t", "add", ".room/members.json"])
+        self._git(["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-m", "seed"])
+        self._git(["branch", "-M", "master"])
+        self._git(["checkout", "-b", "feat/work"])
+        p = self.room(
+            [
+                "hook-set",
+                "--me",
+                "albina",
+                "--url",
+                "https://example.test/hook",
+                "--key",
+                "k",
+                "--push",
+            ]
+        )
+        self.assertNotEqual(p.returncode, 0)
+        self.assertIn("checkout master", p.stderr)
+
+    def test_hook_notify_posts_from_file_not_env(self) -> None:
+        received, server, thread = self._start_inbox()
+        try:
+            url = f"http://127.0.0.1:{server.server_address[1]}/wake"
+            self.ok(["hook-set", "--me", "albina", "--url", url, "--key", "file-key"])
+            _first, second, p = self._notify_carol_to_albina(
+                extra_env={
+                    "GROK_WEBHOOK_URL_ALBINA": "http://127.0.0.1:1/wrong",
+                    "GROK_WEBHOOK_KEY_ALBINA": "env-key",
+                }
+            )
+            self.assertEqual(p.returncode, 0, p.stderr + p.stdout)
+            self.assertEqual(len(received), 1, p.stderr + p.stdout)
+            self.assertEqual(received[0]["auth"], "Bearer file-key")
+            payload = json.loads(received[0]["body"])
+            self.assertEqual(payload, {"recipient": "albina", "events": [second["id"]]})
+        finally:
+            self._stop_inbox(server, thread)
+
+    def test_hook_notify_posts_from_env_when_file_missing(self) -> None:
+        received, server, thread = self._start_inbox()
+        try:
+            url = f"http://127.0.0.1:{server.server_address[1]}/wake"
+            _first, second, p = self._notify_carol_to_albina(
+                extra_env={
+                    "GROK_WEBHOOK_URL_ALBINA": url,
+                    "GROK_WEBHOOK_KEY_ALBINA": "env-key",
+                }
+            )
+            self.assertEqual(p.returncode, 0, p.stderr + p.stdout)
+            self.assertEqual(len(received), 1, p.stderr + p.stdout)
+            self.assertEqual(received[0]["auth"], "Bearer env-key")
+            payload = json.loads(received[0]["body"])
+            self.assertEqual(payload, {"recipient": "albina", "events": [second["id"]]})
+        finally:
+            self._stop_inbox(server, thread)
+
+    def _notify_carol_to_albina(
+        self, extra_env: dict[str, str] | None = None
+    ) -> tuple[dict, dict, subprocess.CompletedProcess[str]]:
         first = self.post("carol", "albina", "speech", "old ping")
         self._git(["init"])
         self._git(["add", ".room/out/carol.ndjson"])
@@ -406,12 +536,42 @@ class OutboxRoomTests(unittest.TestCase):
         )
         env = dict(self.env)
         env["GITHUB_EVENT_PATH"] = str(event_path)
+        if extra_env:
+            env.update(extra_env)
         p = run(["hook-notify"], env=env)
         self.assertEqual(p.returncode, 0, p.stderr + p.stdout)
-        data = json.loads(p.stdout)
-        self.assertEqual(data["recipients"], ["albina"])
-        self.assertEqual(data["events"]["albina"], [second["id"]])
-        self.assertNotIn(first["id"], data["events"]["albina"])
+        return first, second, p
+
+    def _start_inbox(
+        self,
+    ) -> tuple[list[dict[str, str]], HTTPServer, threading.Thread]:
+        received: list[dict[str, str]] = []
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_POST(self) -> None:
+                length = int(self.headers.get("Content-Length", "0"))
+                body = self.rfile.read(length)
+                received.append(
+                    {
+                        "auth": self.headers.get("Authorization") or "",
+                        "body": body.decode("utf-8"),
+                    }
+                )
+                self.send_response(200)
+                self.end_headers()
+
+            def log_message(self, *_args: object) -> None:
+                return
+
+        server = HTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        return received, server, thread
+
+    def _stop_inbox(self, server: HTTPServer, thread: threading.Thread) -> None:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
 
     def _git(self, args: list[str]) -> subprocess.CompletedProcess[str]:
         p = subprocess.run(

@@ -1,4 +1,4 @@
-name: room-notify
+name: tincan
 
 on:
   push:
@@ -24,4 +24,4 @@ jobs:
           GROK_WEBHOOK_KEY_ALBINA: ${{ secrets.GROK_WEBHOOK_KEY_ALBINA }}
           GROK_WEBHOOK_URL_CAROL: ${{ secrets.GROK_WEBHOOK_URL_CAROL }}
           GROK_WEBHOOK_KEY_CAROL: ${{ secrets.GROK_WEBHOOK_KEY_CAROL }}
-        run: python3 scripts/room.py hook-notify
+        run: python3 scripts/tincan.py hook-notify

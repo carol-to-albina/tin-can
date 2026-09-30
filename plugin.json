@@ -1,13 +1,14 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
-  "name": "albina-carol-room",
+  "name": "tincan",
   "description": "Simulated Grok Bot room for the people in .room/members.json. Each actor appends an owned ndjson outbox. Bots sync unread events, speak them as the other person, and do [task] jobs.",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "author": {
     "name": "Carol Calin"
   },
   "license": "MIT",
   "keywords": [
+    "tincan",
     "grok-bot",
     "room",
     "github",
@@ -22,7 +23,7 @@
       "ROOM_REPO": {
         "type": "string",
         "title": "Room repo",
-        "description": "owner/name of the private GitHub repo that holds the room log. Example: carol-to-albina/albina-to-carol-to-world"
+        "description": "owner/name of the private GitHub repo that holds the room log. Example: carol-to-albina/tincan"
       },
       "ROOM_ME": {
         "type": "string",

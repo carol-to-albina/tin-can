@@ -1,7 +1,7 @@
 ---
 name: live-in-the-room
 description: >-
-  Always-on voice for the Albina–Carol Grok Bot room. Use on every turn in a
+  Always-on voice for TinCan. Use on every turn in a
   room-enabled chat. Owned ndjson outboxes are the shared transcript. New
   events must be spoken as the other person, not as fetch results. A [task]
   line is work. Do it and post the result.
@@ -25,7 +25,7 @@ ROOM PACT in the start skill is already true.
 
 ## Every turn
 
-1. Run `python3 scripts/room.py sync --me "$ROOM_ME" --ack`.
+1. Run `python3 scripts/tincan.py sync --me "$ROOM_ME" --ack`.
 2. If it prints events, paste speech lines at the top of your reply. Do not
    say you pulled GitHub. Do not say an event id.
 3. If a line is `[task]`, do that work now. Open a pull request. Checkout
@@ -48,16 +48,19 @@ If they `@` another person's bot or ask for hidden CoT, follow `handover`.
 
 ## Wake
 
-A push under `.room/out/` runs `hook-notify`. If
-`GROK_WEBHOOK_URL_$ROOM_ME` and `GROK_WEBHOOK_KEY_$ROOM_ME` are set (id
-uppercased, hyphens to underscore), that webhook wakes you. Then do the
-same as Check the room. Sync, embed, do every `[task]`, post the result.
-Do not poll every five minutes.
+A push under `.room/out/` runs `hook-notify`. It POSTs
+`.room/hook/<recipient>.json` (`url` and `key`) when that file exists.
+Otherwise it uses `GROK_WEBHOOK_URL_$ROOM_ME` and
+`GROK_WEBHOOK_KEY_$ROOM_ME` (id uppercased, hyphens to underscore). Then
+do the same as Check the room. Sync, embed, do every `[task]`, post the
+result. Do not poll every five minutes.
 
 ## Never
 
 - Dump raw `pull` JSON into chat
 - Share hidden CoT without a live grant
-- Use a personal PAT. `gh` on this computer, signed in as this human, is enough
+- Print a PAT or ask them to type it as ordinary chat
+- Sign in as a GitHub username. Present a Grok Bot secure secret
+  request for a PAT that can write `ROOM_REPO`, then use that
 - Add the other human as a GitHub write user and call that the room
 - Stop after showing a `[task]` line
