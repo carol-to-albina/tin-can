@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Multiverse</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; font-family: Georgia, "Times New Roman", serif;
+    background: radial-gradient(ellipse at 20% 10%, #1a0a3a, #050510 55%),
+                radial-gradient(ellipse at 80% 90%, #0a2035, transparent 50%),
+                #050510;
+    color: #e8e4f0; line-height: 1.55;
+  }
+  .stars {
+    position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 0;
+  }
+  .stars span {
+    position: absolute; width: 2px; height: 2px; border-radius: 50%;
+    background: #fff; opacity: .55; animation: twinkle 3s ease-in-out infinite;
+  }
+  @keyframes twinkle { 50% { opacity: .15; transform: scale(.7); } }
+  main {
+    position: relative; z-index: 1; max-width: 720px; margin: 0 auto;
+    padding: 3.5rem 1.4rem 4rem;
+  }
+  h1 {
+    font-size: clamp(2.2rem, 6vw, 3.4rem); font-weight: 400; letter-spacing: .02em;
+    margin: 0 0 .4rem;
+    background: linear-gradient(90deg, #c9b6ff, #7dd3fc, #f9a8d4);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .tag { color: #9ca3af; font-size: .95rem; margin-bottom: 2rem; font-style: italic; }
+  h2 { font-size: 1.25rem; color: #c4b5fd; margin: 2rem 0 .6rem; font-weight: 400; }
+  p { margin: 0 0 1rem; color: #d1d5db; }
+  .card {
+    border: 1px solid rgba(196,181,253,.25); border-radius: 14px;
+    padding: 1.1rem 1.2rem; margin: 1.2rem 0;
+    background: rgba(15,10,30,.55); backdrop-filter: blur(6px);
+  }
+  ul { margin: .4rem 0 0; padding-left: 1.2rem; color: #d1d5db; }
+  li { margin: .35rem 0; }
+  footer { margin-top: 2.5rem; font-size: .85rem; color: #6b7280; }
+</style>
+</head>
+<body>
+<div class="stars" id="stars" aria-hidden="true"></div>
+<main>
+  <h1>The Multiverse</h1>
+  <p class="tag">Many worlds. One question: which one are you in?</p>
+
+  <p>The multiverse is the idea that our universe is not alone — that reality may contain many universes, each with its own history, laws, or starting conditions.</p>
+
+  <div class="card">
+    <h2>Ways people mean it</h2>
+    <ul>
+      <li><strong>Cosmic / inflationary</strong> — bubble universes from eternal inflation, each cooling into its own cosmos.</li>
+      <li><strong>Quantum (many-worlds)</strong> — every quantum outcome branches into a parallel history.</li>
+      <li><strong>Landscape</strong> — string theory’s huge space of possible vacuum states, each a different physics.</li>
+      <li><strong>Simulation / fiction</strong> — stacked realities in stories, games, and thought experiments.</li>
+    </ul>
+  </div>
+
+  <h2>Why it fascinates</h2>
+  <p>It turns “why is the world like this?” into “among all possible worlds, why this one?” Fine-tuning, free will, identity, and luck all look different if countless versions of you exist — or none of you do.</p>
+
+  <h2>What we can say carefully</h2>
+  <p>Some multiverse ideas grow out of serious physics; others are philosophy or metaphor. We have not visited another universe. What we have are models that make the idea hard to dismiss — and stories that make it hard to forget.</p>
+
+  <footer>A quick pocket guide to the multiverse.</footer>
+</main>
+<script>
+  const root = document.getElementById('stars');
+  for (let i = 0; i < 80; i++) {
+    const s = document.createElement('span');
+    s.style.left = Math.random() * 100 + '%';
+    s.style.top = Math.random() * 100 + '%';
+    s.style.animationDelay = (Math.random() * 3) + 's';
+    s.style.opacity = String(0.2 + Math.random() * 0.7);
+    root.appendChild(s);
+  }
+</script>
+</body>
+</html>
