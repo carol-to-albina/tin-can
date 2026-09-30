@@ -3,20 +3,24 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any, TypeVar
 
 from .types import (
+    BODY_REQUIRED,
     DEFAULT_AUTONOMY,
     DEFAULT_LATENCY_SEC,
     DEFAULT_MODE,
     DEFAULT_WAKE,
+    KIND_CLASSES,
     PROTOCOL,
+    REF_KINDS,
     Autonomy,
     Dropped,
     Event,
+    EventMeta,
     EventRef,
     Grant,
     GrantState,
@@ -33,6 +37,7 @@ from .types import (
     Wake,
     WakeType,
     WhoFile,
+    kind_fields,
 )
 
 E = TypeVar("E", bound=Enum)
@@ -176,17 +181,77 @@ def parse_ref(raw: str) -> EventRef:
     return EventRef.parse(raw)
 
 
+def parse_ts(raw: str) -> datetime:
+    """UTC ISO-8601 with a trailing Z."""
+    if raw.endswith("Z"):
+        try:
+            return datetime.fromisoformat(raw[:-1] + "+00:00")
+        except ValueError:
+            pass
+    raise ProtocolError(f"ts {raw!r} is not UTC ISO-8601 with a Z")
+
+
 def parse_line(writer: MemberId, seq: Seq, raw: str) -> Event:
     """Filename is the actor. Line seq must equal seq.
 
-    Unknown kind or missing ref on a ref-kind is ProtocolError.
+    Unknown kind or missing ref on a ref-kind is ProtocolError. A cot or
+    receipt whose ref misses a grant_request needs the whole cabinet, so
+    load_all_events owns that check.
     """
-    raise NotImplementedError
+    where = f"{writer} line {int(seq)}"
+    data = _object(raw, where)
+    if data.get("seq") != int(seq):
+        raise ProtocolError(f"{where}: seq is {data.get('seq')!r}")
+    try:
+        kind = Kind(data.get("kind"))
+    except ValueError as e:
+        raise ProtocolError(f"{where}: unknown kind {data.get('kind')!r}") from e
+    ts = str(data.get("ts") or "")
+    if not ts:
+        raise ProtocolError(f"{where}: no ts")
+    caps = data.get("capabilities") or []
+    if not isinstance(caps, list):
+        raise ProtocolError(f"{where}: capabilities is not a json array")
+    ref = str(data.get("ref") or "")
+    try:
+        return build_event(
+            writer=writer,
+            seq=seq,
+            to=str(data.get("to") or ""),
+            kind=kind,
+            body=str(data.get("body") or ""),
+            ref=parse_ref(ref) if ref else None,
+            capabilities=tuple(str(cap) for cap in caps),
+            expires=str(data.get("expires") or ""),
+            ts=ts,
+        )
+    except ProtocolError as e:
+        raise ProtocolError(f"{where}: {e}") from e
 
 
 def format_line(event: Event) -> str:
     """One JSON object. No id, no actor, no grant_status."""
-    raise NotImplementedError
+    row: dict[str, Any] = {
+        "seq": int(event.meta.seq),
+        "ts": event.meta.ts,
+        "to": str(event.meta.to),
+        "kind": event.kind.value,
+    }
+    for key, value in (
+        ("body", getattr(event, "body", "")),
+        ("ref", str(getattr(event, "ref", "") or "")),
+        ("capabilities", list(getattr(event, "capabilities", ()))),
+        ("expires", getattr(event, "expires", "")),
+    ):
+        if value:
+            row[key] = value
+    return json.dumps(row, ensure_ascii=False, separators=(",", ":"))
+
+
+def _nonblank(path: Path) -> list[str]:
+    if not path.exists():
+        return []
+    return [line for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
 def load_outbox(root: Path, writer: MemberId) -> list[Event]:
@@ -194,11 +259,14 @@ def load_outbox(root: Path, writer: MemberId) -> list[Event]:
 
     Gap, duplicate, or seq mismatch is ProtocolError.
     """
-    raise NotImplementedError
+    events: list[Event] = []
+    for line in _nonblank(out_path(root, writer)):
+        events.append(parse_line(writer, next_seq(events), line))
+    return events
 
 
 def next_seq(events: list[Event]) -> Seq:
-    raise NotImplementedError
+    return Seq(len(events) + 1)
 
 
 def append_outbox(root: Path, event: Event) -> Path:
@@ -206,7 +274,20 @@ def append_outbox(root: Path, event: Event) -> Path:
 
     If the last line has the same seq and different bytes, ProtocolError.
     """
-    raise NotImplementedError
+    path = out_path(root, event.meta.writer)
+    line = format_line(event)
+    held = _nonblank(path)
+    if held and held[-1] == line:
+        return path
+    seq = int(event.meta.seq)
+    if seq <= len(held):
+        raise ProtocolError(f"{path} already holds seq {seq} with different bytes")
+    if seq > len(held) + 1:
+        raise ProtocolError(f"{path} next seq is {len(held) + 1}, not {seq}")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as f:
+        f.write(line + "\n")
+    return path
 
 
 def load_position(root: Path, me: MemberId) -> Position:
@@ -335,17 +416,63 @@ def build_event(
     expires: str = "",
     ts: str | None = None,
 ) -> Event:
-    """Refuse illegal kind/ref pairs."""
-    raise NotImplementedError
+    """Refuse illegal kind/ref pairs.
+
+    A ref-kind addresses the referenced writer. Pass to as "" to take it
+    from the ref, or pass that same writer.
+    """
+    if int(seq) < 1:
+        raise ProtocolError(f"seq {int(seq)} is not 1-based")
+    stamp = ts or utc_now()
+    parse_ts(stamp)
+    if kind in REF_KINDS:
+        if ref is None:
+            raise ProtocolError(f"{kind.value} needs a ref")
+        if to and str(to) != str(ref.writer):
+            raise ProtocolError(
+                f"{kind.value} to {str(to)!r} is not the referenced writer {str(ref.writer)!r}"
+            )
+        to = ref.writer
+    elif ref is not None:
+        raise ProtocolError(f"{kind.value} takes no ref")
+    if not to:
+        raise ProtocolError(f"{kind.value} needs a to")
+    text = body.strip()
+    carries = kind_fields(kind)
+    if kind in BODY_REQUIRED and not text:
+        raise ProtocolError(f"{kind.value} needs a body")
+    if text and "body" not in carries:
+        raise ProtocolError(f"{kind.value} takes no body")
+    if capabilities and "capabilities" not in carries:
+        raise ProtocolError(f"{kind.value} takes no capabilities")
+    if expires and "expires" not in carries:
+        raise ProtocolError(f"{kind.value} takes no expires")
+    if expires:
+        parse_ts(expires)
+    row: dict[str, Any] = {
+        "meta": EventMeta(writer=writer, seq=Seq(int(seq)), ts=stamp, to=to)
+    }
+    if "ref" in carries:
+        row["ref"] = ref
+    if "body" in carries:
+        row["body"] = text
+    if "capabilities" in carries:
+        row["capabilities"] = tuple(capabilities)
+        row["expires"] = expires
+    return KIND_CLASSES[kind](**row)
 
 
 def utc_now() -> str:
-    raise NotImplementedError
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def find_cabinet(start: Path) -> Path:
     """Walk parents for .tincan/room.json."""
-    raise NotImplementedError
+    here = Path(start).resolve()
+    for candidate in (here, *here.parents):
+        if room_path(candidate).exists():
+            return candidate
+    raise ProtocolError(f"no .tincan/room.json at or above {here}")
 
 
 def migrate_v2(root: Path) -> list[Path]:
