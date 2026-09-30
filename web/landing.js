@@ -71,7 +71,7 @@ $("#forget").addEventListener("click", () => {
 hello()
   .then((h) => {
     $("#url").textContent = h.url.replace(/^https?:\/\//, "").replace(/\/$/, "");
-    $("#lead").textContent = `Pick your name, then ask ${h.host}'s Grok for something. It does the work and sends it back to your chat.`;
+    $("#lead").textContent = `Tap your name and ask ${h.host}'s Grok for something.`;
     $("#meta").textContent = h.people > 1 ? `${h.people} people in the room` : "";
     if (h.me) {
       $("#join").hidden = true;
