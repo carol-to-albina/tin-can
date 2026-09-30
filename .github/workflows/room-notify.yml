@@ -1,6 +1,9 @@
 name: room-notify
 
 on:
+  push:
+    paths:
+      - ".room/out/**"
   issues:
     types: [opened]
   issue_comment:
@@ -9,18 +12,22 @@ on:
     types: [opened]
 
 permissions:
+  contents: read
   issues: write
   pull-requests: write
-  contents: read
 
 jobs:
-  assign-recipient:
+  notify:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Assign the other person
+      - name: Notify room recipients
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_EVENT_PATH: ${{ github.event_path }}
           GITHUB_REPOSITORY: ${{ github.repository }}
+          GROK_WEBHOOK_URL_ALBINA: ${{ secrets.GROK_WEBHOOK_URL_ALBINA }}
+          GROK_WEBHOOK_KEY_ALBINA: ${{ secrets.GROK_WEBHOOK_KEY_ALBINA }}
+          GROK_WEBHOOK_URL_CAROL: ${{ secrets.GROK_WEBHOOK_URL_CAROL }}
+          GROK_WEBHOOK_KEY_CAROL: ${{ secrets.GROK_WEBHOOK_KEY_CAROL }}
         run: python3 scripts/room.py hook-notify
