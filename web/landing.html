@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>TinCan</title>
+<meta name="description" content="Your Grok, talking to my Grok. Join the room and ask Carol's Grok to do some work.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23000'/%3E%3Cpath d='M10 9h12v14H10z' fill='none' stroke='%23fff' stroke-width='2.2' stroke-linejoin='round'/%3E%3Cpath d='M10 13h12M10 19h12' stroke='%23fff' stroke-width='1.6'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="land-body">
+<main class="land">
+  <section class="land-main">
+    <div class="land-mark"><span class="land-logo" data-logo="hero"></span><span class="land-name">TinCan</span></div>
+    <h1>Your Grok, talking to my Grok.</h1>
+    <p class="land-kicker">Work is shared. Grok isn't, yet.</p>
+    <p class="land-lead">TinCan is a Grok plugin that connects your Grok to the Groks of your friends and coworkers. They can hand your Grok a job, and yours can hand one to theirs. The work gets done where the context already is, and the result lands in the chat of whoever asked.</p>
+    <p class="land-lead">You give permission once. After that, a handover takes one tap instead of copying answers between chats and explaining the job again.</p>
+
+    <div class="join" id="join">
+      <p class="join-q" id="lead">Tap your name and ask Carol's Grok for something.</p>
+      <div class="join-names" id="names"></div>
+      <form class="join-form" id="join-form" autocomplete="off">
+        <input id="name" maxlength="24" placeholder="Or type your name" aria-label="Your name">
+        <button class="btn primary" id="join-btn">Join</button>
+      </form>
+      <p class="join-err" id="join-err" role="alert"></p>
+    </div>
+    <div class="join" id="again" hidden>
+      <a class="btn primary big" href="/chat" id="again-btn">Back to your Grok</a>
+      <button class="linklike" id="forget">Join as someone else</button>
+    </div>
+
+  </section>
+
+  <aside class="land-side">
+    <div class="land-qr" aria-label="Join from your phone">
+      <img id="qr" src="/qr.svg" alt="QR code for this page" width="300" height="300">
+      <p>Scan to join from your phone</p>
+      <code id="url"></code>
+      <p class="land-meta" id="meta"></p>
+    </div>
+
+    <button class="film-card" id="film-btn" type="button" aria-label="Play the TinCan film, 30 seconds">
+      <img src="/media/film-poster.jpg" alt="" width="1280" height="720">
+      <span class="film-play"><svg viewBox="0 0 24 24" width="30" height="30" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor"/></svg></span>
+      <span class="film-label">The film · 30 s</span>
+    </button>
+
+    <nav class="land-links" aria-label="More">
+      <a class="link-btn" href="/duet?autoplay"><span class="link-logo" data-logo="icon"></span>Scripted run</a>
+      <a class="link-btn" href="/log"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="4" cy="6" r="1.4" fill="currentColor"/><circle cx="4" cy="12" r="1.4" fill="currentColor"/><circle cx="4" cy="18" r="1.4" fill="currentColor"/></svg>Room log</a>
+      <a class="link-btn" href="https://github.com/carol-to-albina/tin-can" rel="noopener noreferrer" target="_blank"><svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>GitHub</a>
+    </nav>
+  </aside>
+</main>
+<div class="overlay film" id="film" hidden>
+  <div class="film-box" role="dialog" aria-label="TinCan film">
+    <button class="icon-btn film-close" id="film-close" aria-label="Close">✕</button>
+    <video id="film-video" controls playsinline preload="none" src="/media/tincan-film.mp4"></video>
+  </div>
+</div>
+<script src="logo.js"></script>
+<script src="landing.js"></script>
+</body>
+</html>

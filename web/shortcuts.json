@@ -1,0 +1,9 @@
+[
+  {"keys": ["Mod", "K"], "does": "Open the command menu"},
+  {"keys": ["/"], "does": "Jump to the message box"},
+  {"keys": ["Enter"], "does": "Send"},
+  {"keys": ["Shift", "Enter"], "does": "New line"},
+  {"keys": ["Mod", "Enter"], "does": "Accept the task your Grok is holding"},
+  {"keys": ["Mod", "J"], "does": "Show or hide the room"},
+  {"keys": ["Esc"], "does": "Close the menu or the handover"}
+]

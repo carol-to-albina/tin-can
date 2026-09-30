@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>TinCan</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23000'/%3E%3Cpath d='M10 9h12v14H10z' fill='none' stroke='%23fff' stroke-width='2.2' stroke-linejoin='round'/%3E%3Cpath d='M10 13h12M10 19h12' stroke='%23fff' stroke-width='1.6'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app" id="app">
+  <aside class="sidebar" id="sidebar">
+    <div class="sb-head">
+      <a class="mark" href="?" aria-label="TinCan home">
+        <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M6 5.5h12v13H6z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M6 9.5h12M6 14.5h12" stroke="currentColor" stroke-width="1.3"/><path d="M18 12c2.5 0 3.5 1.2 3.5 3" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+      </a>
+      <button class="icon-btn sb-collapse" id="sb-close" aria-label="Close sidebar">
+        <svg viewBox="0 0 24 24" width="18" height="18"><rect x="3.5" y="4.5" width="17" height="15" rx="3" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M9.5 4.5v15" stroke="currentColor" stroke-width="1.6"/></svg>
+      </button>
+    </div>
+    <nav class="sb-nav">
+      <label class="sb-item sb-search">
+        <svg viewBox="0 0 24 24" width="18" height="18"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="m16 16 4 4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+        <input id="search" type="search" placeholder="Search" autocomplete="off">
+        <kbd>Ctrl+K</kbd>
+      </label>
+      <button class="sb-item" id="to-room">
+        <svg viewBox="0 0 24 24" width="18" height="18"><path d="M4 20h4L19 9l-4-4L4 16z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="m13.5 6.5 4 4" stroke="currentColor" stroke-width="1.7"/></svg>
+        <span>Room</span>
+      </button>
+      <button class="sb-item" id="to-tasks">
+        <svg viewBox="0 0 24 24" width="18" height="18"><rect x="4" y="4" width="16" height="16" rx="4" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="m8.5 12.5 2.3 2.3 4.7-5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span>Tasks</span>
+        <span class="count" id="task-count" hidden></span>
+      </button>
+    </nav>
+    <div class="sb-label">History</div>
+    <div class="sb-threads" id="threads"></div>
+    <div class="sb-foot">
+      <button class="sb-user" id="whoami" aria-haspopup="menu">
+        <span class="avatar" id="me-avatar"></span>
+        <span class="sb-user-name" id="me-name"></span>
+        <svg class="chev" viewBox="0 0 24 24" width="14" height="14"><path d="m8 10 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <button class="icon-btn sb-open" id="sb-open" aria-label="Open sidebar">
+        <svg viewBox="0 0 24 24" width="18" height="18"><rect x="3.5" y="4.5" width="17" height="15" rx="3" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M9.5 4.5v15" stroke="currentColor" stroke-width="1.6"/></svg>
+      </button>
+      <div class="title" id="title"></div>
+      <div class="top-right">
+        <span class="pill status" id="status"></span>
+        <button class="icon-btn" id="theme" aria-label="Toggle theme" title="Toggle theme">
+          <svg viewBox="0 0 24 24" width="18" height="18"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <div class="scroll" id="scroll">
+      <div class="column" id="messages"></div>
+    </div>
+
+    <div class="dock" id="dock">
+      <div class="hero" id="hero" hidden>
+        <div class="hero-mark">
+          <svg viewBox="0 0 24 24" width="40" height="40" aria-hidden="true"><path d="M6 5.5h12v13H6z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M6 9.5h12M6 14.5h12" stroke="currentColor" stroke-width="1.1"/><path d="M18 12c2.5 0 3.5 1.2 3.5 3" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>
+          <span>TinCan</span>
+        </div>
+      </div>
+      <form class="composer" id="composer" autocomplete="off">
+        <textarea id="input" rows="1" placeholder="What do you want to say?" aria-label="Message"></textarea>
+        <div class="composer-row">
+          <div class="composer-left">
+            <button type="button" class="icon-btn round" id="attach" aria-label="Attach" title="Files go in the repo, not the room" disabled>
+              <svg viewBox="0 0 24 24" width="18" height="18"><path d="m20 11.5-7.8 7.8a5 5 0 0 1-7.1-7.1l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7L9.8 16.9a1.7 1.7 0 0 1-2.4-2.4l7.4-7.4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+            </button>
+            <button type="button" class="toggle" id="task-toggle" aria-pressed="false">
+              <svg viewBox="0 0 24 24" width="16" height="16"><rect x="4" y="4" width="16" height="16" rx="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m8.5 12.5 2.3 2.3 4.7-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <span>Task</span>
+            </button>
+          </div>
+          <div class="composer-right">
+            <button type="button" class="picker" id="to-picker" aria-haspopup="menu">
+              <span id="to-label">Room</span>
+              <svg viewBox="0 0 24 24" width="14" height="14"><path d="m8 10 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <button type="submit" class="send" id="send" aria-label="Send" disabled>
+              <svg viewBox="0 0 24 24" width="18" height="18"><path d="M12 19V5m0 0-6 6m6-6 6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+          </div>
+        </div>
+      </form>
+      <div class="chips" id="chips" hidden></div>
+      <p class="fineprint" id="fineprint"></p>
+    </div>
+  </main>
+</div>
+
+<div class="gate" id="gate" hidden>
+  <div class="gate-box">
+    <div class="hero-mark">
+      <svg viewBox="0 0 24 24" width="40" height="40" aria-hidden="true"><path d="M6 5.5h12v13H6z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M6 9.5h12M6 14.5h12" stroke="currentColor" stroke-width="1.1"/><path d="M18 12c2.5 0 3.5 1.2 3.5 3" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>
+      <span>TinCan</span>
+    </div>
+    <p id="gate-msg"></p>
+    <a class="btn primary gate-btn" id="gate-signin" href="/auth/login">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.61.07-.61 1 .07 1.53 1.03 1.53 1.03.89 1.53 2.34 1.09 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02a9.6 9.6 0 0 1 5 0c1.91-1.29 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.85v2.74c0 .27.18.58.69.48A10 10 0 0 0 12 2Z"/></svg>
+      Sign in with GitHub
+    </a>
+    <a class="btn gate-btn" id="gate-signout" href="/auth/logout" hidden>Use another GitHub account</a>
+  </div>
+</div>
+<div class="menu" id="menu" role="menu" hidden></div>
+<div class="toast" id="toast" role="status" hidden></div>
+<script src="app.js"></script>
+</body>
+</html>
