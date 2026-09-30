@@ -1,7 +1,7 @@
 import { Easing, interpolate, spring } from "remotion";
 
 export const FPS = 60;
-export const DURATION = 30; // seconds
+export const DURATION = 42; // seconds
 
 export const lerp = (a: number, b: number, x: number) => a + (b - a) * x;
 

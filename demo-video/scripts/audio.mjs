@@ -51,6 +51,49 @@ if (!only || only === "vo") {
   }
 }
 
+// v3 finale: one line per Starship step, and a ~21 s music bed for 19.2 s -> end.
+if (only === "v3") {
+  const steps = [
+    ["vo6", "To reach Mars, Starship rides Super Heavy to orbit."],
+    ["vo7", "Tankers dock, one after another, and top off its tanks."],
+    ["vo8", "Then one long burn, straight for Mars."],
+    ["vo9", "Aerobrake. Flip. Land."],
+  ];
+  for (const [i, [id, text]] of steps.entries()) {
+    const audio = await post(`/v1/text-to-speech/${VOICE}?output_format=mp3_44100_192`, {
+      text,
+      model_id: "eleven_multilingual_v2",
+      previous_text: [...LINES.map((l) => l[1]), ...steps.slice(0, i).map((l) => l[1])].join(" "),
+      next_text: steps.slice(i + 1).map((l) => l[1]).join(" ") || undefined,
+      voice_settings: { stability: 0.45, similarity_boost: 0.8, style: 0.35, use_speaker_boost: true },
+    });
+    const file = `public/vo/${id}.mp3`;
+    writeFileSync(file, audio);
+    console.log(file, duration(file).toFixed(2) + "s", "-", text);
+  }
+  const chunk = (text, duration_ms, positive_styles, negative_styles) => ({
+    text,
+    duration_ms,
+    positive_styles: ["118 BPM", "instrumental", ...positive_styles],
+    negative_styles: ["vocals", "singing", ...negative_styles],
+    context_adherence: "high",
+  });
+  const plan = {
+    chunks: [
+      chunk("[Zoom Out]", 6000, ["wide cinematic cosmic swell", "rising synth arpeggios", "airy sweeping pads", "feeling of zooming out into space", "immersive stereo width"], []),
+      chunk("[Launch and Orbit]", 8200, ["driving cinematic pulse", "deep low drums", "rumbling sub bass like a rocket launch", "space documentary score", "steady and confident", "space for voiceover"], ["big melody"]),
+      chunk("[Arrival]", 3400, ["tension building strings", "shimmering synths", "anticipation before landing"], ["drums"]),
+      chunk("[Final Hit]", 3200, ["one bright final synth hit on the downbeat", "long ringing reverb tail", "uplifting resolution chord", "sparkling high-end accent"], ["drums continue", "new melody"]),
+    ],
+  };
+  const file = "public/music-v3.mp3";
+  writeFileSync(
+    file,
+    await post("/v1/music?output_format=mp3_44100_192", { composition_plan: plan, model_id: process.env.MUSIC_MODEL || "music_v2_5", respect_sections_durations: true }),
+  );
+  console.log(file, duration(file).toFixed(2) + "s");
+}
+
 // Music: 30 s, light bed under the voiceover, swell for the zoom-out, final hit at ~28 s.
 if (!only || only === "music") {
   // music_v2_5 plan schema ("chunks"; bracketed text = instrumental section tag).

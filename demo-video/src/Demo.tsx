@@ -1,13 +1,15 @@
 import React from "react";
 import { AbsoluteFill, Easing, interpolate, Sequence, staticFile, useCurrentFrame } from "remotion";
 import { Audio } from "@remotion/media";
-import { FPS, ramp } from "./lib";
+import { DURATION, FPS, ramp } from "./lib";
 import { AppScene, MSGS, T } from "./app";
 import { EndCard, TinCanScene } from "./scenes";
 import { World, worldU } from "./world";
+import { SPACE } from "./space";
 
 const STAGES = [19.9, 21.3, 22.55, 23.6]; // zoom-out: bots -> people -> buildings -> city light
-const END = 28.0;
+const END = SPACE.end; // end card
+const MUSIC2 = 22.2; // v3 finale music takes over; its final hit lands on END
 
 // [start second, file, volume]
 const VO: [number, string][] = [
@@ -19,6 +21,11 @@ const VO: [number, string][] = [
   [14.55, "vo4c"],
   [17.2, "vo5a"],
   [19.1, "vo5b"],
+  // v3: one line per Starship step
+  [SPACE.launch + 0.05, "vo6"],
+  [SPACE.orbit + 0.1, "vo7"],
+  [SPACE.tmi + 0.05, "vo8"],
+  [SPACE.entry + 0.1, "vo9"],
 ];
 const typeTicks = (t0: number, t1: number, n: number) => Array.from({ length: n }, (_, i) => t0 + ((t1 - t0) * i) / n);
 const SFX: [number, string, number][] = [
@@ -61,7 +68,7 @@ export const Demo: React.FC = () => {
       )}
       {t >= END - 0.12 && (
         <AbsoluteFill style={{ clipPath: `circle(${2300 * ramp(t, END - 0.12, END + 0.22, Easing.in(Easing.cubic))}px at 960px 560px)` }}>
-          <EndCard t={t} />
+          <EndCard t={t} start={END} />
         </AbsoluteFill>
       )}
 
@@ -70,9 +77,18 @@ export const Demo: React.FC = () => {
         src={staticFile("music.mp3")}
         volume={(f) => {
           const s = f / FPS;
-          return interpolate(s, [0, 0.4, 19.0, 20.0, 29.4, 30], [0, 0.2, 0.2, 0.72, 0.72, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+          return interpolate(s, [0, 0.4, 19.0, 20.0, MUSIC2, MUSIC2 + 0.6], [0, 0.2, 0.2, 0.72, 0.72, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
         }}
       />
+      <Sequence from={at(MUSIC2)} layout="none">
+        <Audio
+          src={staticFile("music-v3.mp3")}
+          volume={(f) => {
+            const s = MUSIC2 + f / FPS;
+            return interpolate(s, [MUSIC2, MUSIC2 + 0.5, DURATION - 0.8, DURATION], [0, 0.5, 0.6, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+          }}
+        />
+      </Sequence>
       {VO.map(([s, id]) => (
         <Sequence key={id} from={at(s)} layout="none">
           <Audio src={staticFile(`vo/${id}.mp3`)} volume={1} />

@@ -44,8 +44,8 @@ export const TinCanScene: React.FC<{ t: number }> = ({ t }) => {
   );
 };
 
-export const EndCard: React.FC<{ t: number }> = ({ t }) => {
-  const l = t - 28;
+export const EndCard: React.FC<{ t: number; start: number }> = ({ t, start }) => {
+  const l = t - start;
   const a = pop(l, 0.12, { damping: 16, stiffness: 140 });
   const b = ramp(l, 0.45, 0.8);
   return (
