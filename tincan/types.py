@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from enum import Enum
 from pathlib import Path
 from typing import Literal, NewType, Union
@@ -207,6 +207,39 @@ Event = Union[
     Cot,
     Receipt,
 ]
+
+KIND_CLASSES: dict[Kind, type] = {
+    Kind.SPEECH: Speech,
+    Kind.TASK: TaskPosted,
+    Kind.CLAIM: Claim,
+    Kind.DONE: Done,
+    Kind.FAIL: Fail,
+    Kind.GRANT_REQUEST: GrantRequest,
+    Kind.GRANT: GrantApproved,
+    Kind.DENY: Deny,
+    Kind.REVOKE: Revoke,
+    Kind.COT: Cot,
+    Kind.RECEIPT: Receipt,
+}
+
+BODY_REQUIRED = frozenset(
+    {
+        Kind.SPEECH,
+        Kind.TASK,
+        Kind.DONE,
+        Kind.FAIL,
+        Kind.GRANT_REQUEST,
+        Kind.COT,
+        Kind.RECEIPT,
+    }
+)
+
+
+def kind_fields(kind: Kind) -> frozenset[str]:
+    return frozenset(f.name for f in fields(KIND_CLASSES[kind]))
+
+
+REF_KINDS = frozenset(kind for kind in KIND_CLASSES if "ref" in kind_fields(kind))
 
 
 @dataclass(frozen=True)
