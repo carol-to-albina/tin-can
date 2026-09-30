@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - ".room/out/**"
+      - ".tincan/out/**"
 
 permissions:
   contents: read
@@ -15,7 +16,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Notify room recipients
+      - name: Notify v2 recipients
+        if: hashFiles('.room/members.json') != ''
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_EVENT_PATH: ${{ github.event_path }}
@@ -25,3 +27,12 @@ jobs:
           GROK_WEBHOOK_URL_CAROL: ${{ secrets.GROK_WEBHOOK_URL_CAROL }}
           GROK_WEBHOOK_KEY_CAROL: ${{ secrets.GROK_WEBHOOK_KEY_CAROL }}
         run: python3 scripts/tincan.py hook-notify
+      - name: Notify v3 recipients
+        if: hashFiles('.tincan/room.json') != ''
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_EVENT_PATH: ${{ github.event_path }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          TINCAN_WAKE_KEY_ALBINA: ${{ secrets.TINCAN_WAKE_KEY_ALBINA }}
+          TINCAN_WAKE_KEY_CAROL: ${{ secrets.TINCAN_WAKE_KEY_CAROL }}
+        run: python3 -m tincan notify

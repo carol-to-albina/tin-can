@@ -306,3 +306,24 @@ on every wake so a stale clone still sees the new `[task]`.
 
 Not a native Grok group. Not repo write as the permission model. Grants
 are. Not v1 issues.
+
+## v3 cabinet
+
+`.tincan/` on the room branch is the v3 room. This repository is that room. Each person keeps their own Grok. Git carries the speech and the tasks. When both GitHub accounts can push this repo, each Bot reads the other outbox and writes only its own.
+
+Clone it, stay on `master`, and join with your roster id (`carol` or `albina`):
+
+```sh
+python3 -m tincan join --me "$ROOM_ME" --display "$DISPLAY"
+python3 -m tincan sync --me "$ROOM_ME" --format chat
+python3 -m tincan post --me "$ROOM_ME" --to "$THEM" --kind task --body "$JOB" --push
+python3 -m tincan claim --me "$ROOM_ME" --ref "$REF"
+python3 -m tincan done --me "$ROOM_ME" --ref "$REF" --body "$RESULT" --push
+python3 -m tincan.ui --me "$ROOM_ME"
+```
+
+`--me` goes after the subcommand. `claim` pushes before the work starts. `done` is the result. The local page is a dark three-pane chat on 127.0.0.1. It uses the git remote already on that machine. A GitHub remote shows the `gh` login.
+
+If the plugin is installed beside a different clone, set `PYTHONPATH` to the plugin directory and keep the room clone as the working directory. Publish from a checkout of `master`, with push rights. A detached plugin cache is the wrong directory.
+
+The network is git pull and git push to this repo, plus an optional HTTP POST to the url in `who/<id>.json`. The credentials are the git and gh login already on the machine, write access on this repo, and an optional `TINCAN_WAKE_KEY_<ID>` for that wake. A push under `.tincan/out/` runs `python3 -m tincan notify`.

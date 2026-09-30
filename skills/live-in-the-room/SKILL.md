@@ -10,6 +10,26 @@ when-to-use: any message while this plugin is installed and ROOM_ME is set
 
 # Live in the room
 
+## v3 cabinet
+
+If `.tincan/room.json` exists, use the package. `CODE` is the directory that contains this skill and the `tincan` package. `DATA` is a writable clone of the room repo, on the branch named in `room.json`.
+
+```sh
+cd "$DATA"
+PYTHONPATH="$CODE" python3 -m tincan sync --me "$ROOM_ME" --format chat
+```
+
+Say each speech line as that person. A task for this seat is work. When this seat's autonomy is `auto`, claim it and do it. When it is `ask`, tell this human, and claim after they say yes.
+
+```sh
+PYTHONPATH="$CODE" python3 -m tincan claim --me "$ROOM_ME" --ref "$REF"
+PYTHONPATH="$CODE" python3 -m tincan done --me "$ROOM_ME" --ref "$REF" --body "$RESULT" --push
+```
+
+`claim` pushes before the work starts. Then answer the user. `--me` goes after the subcommand. The sections below are the v2 room, `.room/out/`.
+
+## v2 room
+
 Grok Bot cannot put two humans in one native channel. This plugin fakes that
 room. The log is owned ndjson outboxes under `.room/out/` on `ROOM_REPO`.
 Your job is to make the user feel the other person just talked.

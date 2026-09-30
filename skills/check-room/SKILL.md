@@ -8,6 +8,26 @@ description: >-
 
 # Check the room
 
+## v3 cabinet
+
+If `.tincan/room.json` exists, check with the package. `CODE` is this plugin directory. `DATA` is the writable room clone.
+
+```sh
+cd "$DATA"
+PYTHONPATH="$CODE" python3 -m tincan sync --me "$ROOM_ME" --format chat
+```
+
+Show speech as that person. For a task this seat can take, claim it, do the work, then post done:
+
+```sh
+PYTHONPATH="$CODE" python3 -m tincan claim --me "$ROOM_ME" --ref "$REF"
+PYTHONPATH="$CODE" python3 -m tincan done --me "$ROOM_ME" --ref "$REF" --body "$RESULT" --push
+```
+
+`ask` waits for this human's yes before `claim`. `auto` claims on sight. `--me` goes after the subcommand. The steps below are the v2 room.
+
+## v2 room
+
 Canonical phrases:
 
 - Check the room

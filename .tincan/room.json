@@ -1,0 +1,17 @@
+{
+  "protocol": 3,
+  "room": "tincan",
+  "repo": "carol-to-albina/tin-can",
+  "branch": "master",
+  "host": "carol",
+  "members": {
+    "albina": {
+      "github": "enjojoy",
+      "display": "Albina"
+    },
+    "carol": {
+      "github": "rainbowpuffpuff",
+      "display": "Carol"
+    }
+  }
+}
