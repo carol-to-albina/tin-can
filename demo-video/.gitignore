@@ -1,0 +1,9 @@
+.env
+node_modules
+out
+# Grok Bot app sounds: fetch locally with scripts/grok-sounds.sh
+public/sfx/blip.wav
+public/sfx/tick.wav
+public/sfx/send.wav
+public/sfx/chime-a.wav
+public/sfx/chime-b.wav
