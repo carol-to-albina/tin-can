@@ -60,7 +60,7 @@ class WakeCase(unittest.TestCase):
             if name.startswith("TINCAN_WAKE_KEY_") and name not in values:
                 del os.environ[name]
 
-    def doorbell(self) -> tuple[list[dict[str, str]], str]:
+    def doorbell(self, status: int = 200) -> tuple[list[dict[str, str]], str]:
         rung: list[dict[str, str]] = []
 
         class Handler(BaseHTTPRequestHandler):
@@ -74,7 +74,7 @@ class WakeCase(unittest.TestCase):
                         "body": self.rfile.read(length).decode("utf-8"),
                     }
                 )
-                self.send_response(200)
+                self.send_response(status)
                 self.send_header("Content-Length", "0")
                 self.end_headers()
 
@@ -140,6 +140,14 @@ class PostHttpTests(WakeCase):
         self.assertEqual(len(lines), 1)
         self.assertIn("albina", lines[0])
 
+    def test_post_http_prints_one_line_when_the_server_errors(self) -> None:
+        rung, url = self.doorbell(status=500)
+        noise = io.StringIO()
+        with contextlib.redirect_stderr(noise):
+            wake.post_http(url, "file-key", NOTE)
+        self.assertEqual(len(rung), 1)
+        self.assertEqual(len(noise.getvalue().splitlines()), 1)
+
     def test_post_http_prints_one_line_on_a_bad_url(self) -> None:
         noise = io.StringIO()
         with contextlib.redirect_stderr(noise):
@@ -172,10 +180,10 @@ class NotifyMemberTests(WakeCase):
         self.assertEqual(rung, [])
 
     def test_notify_member_skips_a_missing_url(self) -> None:
-        rung, _ = self.doorbell()
         self.env(TINCAN_WAKE_KEY_ALBINA="env-key")
-        wake.notify_member(member(key="file-key"), NOTE, False)
-        self.assertEqual(rung, [])
+        with mock.patch.object(wake, "post_http") as posted:
+            wake.notify_member(member(key="file-key"), NOTE, False)
+        posted.assert_not_called()
 
 
 if __name__ == "__main__":

@@ -62,11 +62,9 @@ def _upstream(root: Path) -> str:
 
 
 def _pathspec(root: Path, path: Path) -> str:
-    """A path already under the root stays as given. An absolute path is relativized."""
-    if not Path(path).is_absolute():
-        return str(path)
+    inside = Path(path) if Path(path).is_absolute() else Path(root) / path
     try:
-        return str(Path(path).resolve().relative_to(Path(root).resolve()))
+        return str(inside.resolve().relative_to(Path(root).resolve()))
     except ValueError:
         raise ProtocolError(f"{path} is outside {root}") from None
 
@@ -78,12 +76,16 @@ def _tracked(root: Path, spec: str) -> bool:
 def _read(path: Path) -> str:
     try:
         return path.read_text()
-    except OSError:
+    except FileNotFoundError:
         return ""
 
 
 def _nonblank(text: str) -> int:
     return sum(1 for raw in text.splitlines() if raw.strip())
+
+
+def _null_oid(rev: str) -> bool:
+    return bool(rev) and set(rev) == {"0"}
 
 
 def _github_slug(url: str) -> str:
@@ -106,19 +108,19 @@ def _github_slug(url: str) -> str:
 
 
 def _line_of_seq(path: Path, seq: Seq) -> int:
-    """The 1-based file line holding that seq. Blank lines do not consume seq."""
+    """The 1-based file line holding that seq, or 0 when the file has no such line."""
     seen = 0
     for number, raw in enumerate(_read(path).splitlines(), start=1):
         if not raw.strip():
             continue
         seen += 1
-        if seen == int(seq):
+        if seen == seq:
             return number
     return 0
 
 
 def _porcelain_author(text: str) -> GitAuthor:
-    if set(text.split(" ", 1)[0]) == {"0"}:
+    if _null_oid(text.split(" ", 1)[0]):
         return UNCOMMITTED
     name = ""
     email = ""
@@ -161,8 +163,10 @@ def pull(root: Path) -> None:
             raise ConflictError(_why(run))
         return
     branch = _head_branch(root)
+    if not branch:
+        raise ProtocolError("HEAD is detached; cannot pull")
     remote = _remote(root)
-    if not branch or not remote:
+    if not remote:
         return
     listing = _run(root, "ls-remote", "--heads", remote, branch)
     if listing.returncode != 0 or not listing.stdout.strip():
@@ -232,9 +236,11 @@ def author_of_line(root: Path, path: Path, seq: Seq) -> GitAuthor:
     spec = _pathspec(root, path)
     line = _line_of_seq(root / spec, seq)
     if not line:
-        raise ProtocolError(f"{spec} has no line for seq {int(seq)}")
+        raise ProtocolError(f"{spec} has no line for seq {seq}")
     run = _run(root, "blame", "--line-porcelain", "-L", f"{line},{line}", "--", spec)
     if run.returncode != 0:
+        if _run(root, "cat-file", "-e", f"HEAD:./{spec}").returncode == 0:
+            raise ProtocolError(_why(run))
         return UNCOMMITTED
     return _porcelain_author(run.stdout)
 
@@ -242,20 +248,19 @@ def author_of_line(root: Path, path: Path, seq: Seq) -> GitAuthor:
 def added_since(root: Path, path: Path, before_rev: str) -> list[int]:
     """The seqs in the working file that before_rev did not carry.
 
-    seq is the non-blank line index, so every index past the count at that
-    revision is new. An empty or all-zero rev is a first push where the whole
-    file is new.
+    An empty or all-zero rev is a first push, so the whole file is new.
     """
     require_repo(root)
     spec = _pathspec(root, path)
-    rev = (before_rev or "").strip()
+    rev = before_rev.strip()
     before = 0
-    if rev and set(rev) != {"0"}:
+    if rev and not _null_oid(rev):
         known = _run(root, "rev-parse", "--verify", "--quiet", f"{rev}^{{commit}}")
         if known.returncode != 0:
             raise ProtocolError(f"unknown revision {rev}")
         shown = _run(root, "show", f"{rev}:./{spec}")
         before = _nonblank(shown.stdout) if shown.returncode == 0 else 0
+    # seq is the non-blank line index, so every index past the old count is new.
     return list(range(before + 1, _nonblank(_read(root / spec)) + 1))
 
 
@@ -281,9 +286,8 @@ def remote_is_public(root: Path) -> bool:
         )
         with urllib.request.urlopen(request, timeout=API_TIMEOUT_SEC) as answer:
             body = json.loads(answer.read().decode("utf-8"))
-    except urllib.error.HTTPError as refused:
-        refused.close()
-        return False
-    except (OSError, ValueError, TimeoutError):
+    except (OSError, ValueError, TimeoutError) as failure:
+        if isinstance(failure, urllib.error.HTTPError):
+            failure.close()  # an error status arrives as an open response
         return False
     return isinstance(body, dict) and body.get("private") is False
