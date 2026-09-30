@@ -86,6 +86,16 @@ class RequireTests(GitCase):
             git.require_branch(work, "master")
         self.assertIn("master", str(caught.exception))
 
+    def test_require_repo_dies_when_the_root_is_missing(self) -> None:
+        with self.assertRaises(ProtocolError):
+            git.require_repo(self.root / "gone")
+
+    def test_a_missing_git_binary_says_so(self) -> None:
+        work = self.seeded()
+        with mock.patch.dict(os.environ, {"PATH": str(self.root / "nowhere")}):
+            with self.assertRaises(git.GitMissing):
+                git.require_repo(work)
+
     def test_require_branch_dies_on_a_detached_head(self) -> None:
         work = self.seeded()
         self.git(work, "checkout", "--detach")
