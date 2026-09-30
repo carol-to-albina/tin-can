@@ -1,12 +1,11 @@
-// "Powers of ten" finale: bots -> people -> buildings -> continents -> Earth & Mars,
-// every level joined by its own tin-can string. Each level is drawn on its own
-// 1920x1080 canvas; level j sits inside level j+1 at offset A[j+1] and scale S[j+1].
-import React, { useMemo } from "react";
-import { AbsoluteFill, interpolate, interpolateColors } from "remotion";
-import { geoGraticule10, geoOrthographic, geoPath } from "d3-geo";
-import { feature } from "topojson-client";
-import land110 from "world-atlas/land-110m.json";
+// "Powers of ten" finale: bots -> people -> buildings, every level joined by its own
+// tin-can string, then the buildings shrink into one city light on the real Earth (space.tsx).
+// Each level is drawn on its own 1920x1080 canvas; level j sits inside level j+1 at
+// offset A[j+1] and scale S[j+1].
+import React from "react";
+import { AbsoluteFill, Img, interpolate, interpolateColors, staticFile } from "remotion";
 import { ramp } from "./lib";
+import { Space, SPACE } from "./space";
 
 type P = [number, number];
 
@@ -215,101 +214,18 @@ export const Level2: React.FC<{ t: number }> = ({ t }) => {
   );
 };
 
-// ---------- level 3: the globe ----------
-
-const land = feature(land110 as any, (land110 as any).objects.land) as any;
-const graticule = geoGraticule10();
-const CITIES: Record<string, P> = { nyc: [-74.0, 40.7], prague: [14.42, 50.08] };
-
-export const Level3: React.FC<{ t: number }> = ({ t }) => {
-  const spin = (t - 24) * 3; // slow spin, degrees
-  const g = useMemo(() => {
-    const proj = geoOrthographic().scale(400).translate([960, 560]).rotate([35 - spin, -36]).clipAngle(90).precision(0.4);
-    const path = geoPath(proj);
-    return { land: path(land) ?? "", grid: path(graticule) ?? "", nyc: proj(CITIES.nyc) as P, prague: proj(CITIES.prague) as P };
-  }, [spin]);
-  const mid: P = [(g.nyc[0] + g.prague[0]) / 2, (g.nyc[1] + g.prague[1]) / 2];
-  const out = Math.hypot(mid[0] - 960, mid[1] - 560) || 1;
-  const lift = Math.hypot(g.prague[0] - g.nyc[0], g.prague[1] - g.nyc[1]) * 0.42;
-  const ctrl: P = [mid[0] + ((mid[0] - 960) / out) * lift, mid[1] + ((mid[1] - 560) / out) * lift];
-  const ang = (from: P) => (Math.atan2(ctrl[1] - from[1], ctrl[0] - from[0]) * 180) / Math.PI;
-  return (
-    <svg width={1920} height={1080} viewBox="0 0 1920 1080" style={{ overflow: "visible" }}>
-      <Defs />
-      <defs>
-        <radialGradient id="ocean" cx="0.38" cy="0.32" r="0.75">
-          <stop offset="0" stopColor="#4a9be0" />
-          <stop offset="1" stopColor="#163f78" />
-        </radialGradient>
-        <radialGradient id="atmos" cx="0.5" cy="0.5" r="0.5">
-          <stop offset="0.9" stopColor="#8cc6ff" stopOpacity="0.75" />
-          <stop offset="1" stopColor="#8cc6ff" stopOpacity="0" />
-        </radialGradient>
-        <radialGradient id="shade" cx="0.33" cy="0.28" r="0.85">
-          <stop offset="0.45" stopColor="#000" stopOpacity="0" />
-          <stop offset="1" stopColor="#000" stopOpacity="0.5" />
-        </radialGradient>
-      </defs>
-      <circle cx={960} cy={560} r={444} fill="url(#atmos)" />
-      <circle cx={960} cy={560} r={400} fill="url(#ocean)" />
-      <path d={g.grid} fill="none" stroke="#ffffff" strokeOpacity={0.12} strokeWidth={1} />
-      <path d={g.land} fill="#7cc383" stroke="#5aa463" strokeWidth={1} />
-      <circle cx={960} cy={560} r={400} fill="url(#shade)" />
-      <Line a={canEnd(...g.nyc, ang(g.nyc), 22)} b={canEnd(...g.prague, ang(g.prague), 22)} sag={0} control={ctrl} w={2.4} t={t + 0.2} period={1.1} glow />
-      <Can x={g.nyc[0]} y={g.nyc[1]} angle={ang(g.nyc)} len={22} dia={17} />
-      <Can x={g.prague[0]} y={g.prague[1]} angle={ang(g.prague)} len={22} dia={17} />
-    </svg>
-  );
-};
-
-// ---------- level 4: Earth <-> Mars ----------
-
-export const Level4: React.FC<{ t: number }> = ({ t }) => {
-  const E: P = [520, 580];
-  const M: P = [1470, 520];
-  const th = Math.atan2(M[1] - E[1], M[0] - E[0]);
-  const deg = (th * 180) / Math.PI;
-  const em: P = [E[0] + 120 * Math.cos(th), E[1] + 120 * Math.sin(th)];
-  const mm: P = [M[0] - 80 * Math.cos(th), M[1] - 80 * Math.sin(th)];
-  return (
-    <svg width={1920} height={1080} viewBox="0 0 1920 1080" style={{ overflow: "visible" }}>
-      <Defs />
-      <defs>
-        <radialGradient id="mars" cx="0.36" cy="0.32" r="0.8">
-          <stop offset="0" stopColor="#f39a63" />
-          <stop offset="0.55" stopColor="#c9522a" />
-          <stop offset="1" stopColor="#6e2410" />
-        </radialGradient>
-        <clipPath id="marsClip">
-          <circle cx={M[0]} cy={M[1]} r={80} />
-        </clipPath>
-      </defs>
-      <circle cx={M[0]} cy={M[1]} r={92} fill="#ff9b6a" opacity={0.12} />
-      <circle cx={M[0]} cy={M[1]} r={80} fill="url(#mars)" />
-      <g clipPath="url(#marsClip)">
-        <ellipse cx={M[0] - 18} cy={M[1] + 10} rx={34} ry={12} fill="#8e3314" opacity={0.45} />
-        <ellipse cx={M[0] + 26} cy={M[1] - 22} rx={20} ry={9} fill="#8e3314" opacity={0.35} />
-        <ellipse cx={M[0] + 8} cy={M[1] + 42} rx={28} ry={8} fill="#8e3314" opacity={0.3} />
-        <ellipse cx={M[0]} cy={M[1] - 74} rx={30} ry={12} fill="#fff4ee" opacity={0.9} />
-      </g>
-      <Line a={canEnd(...em, deg, 50)} b={canEnd(...mm, deg + 180, 50)} sag={70} w={3.4} t={t + 0.5} period={1.2} glow />
-      <Can x={em[0]} y={em[1]} angle={deg} len={50} dia={38} />
-      <Can x={mm[0]} y={mm[1]} angle={deg + 180} len={50} dia={38} />
-    </svg>
-  );
-};
-
 // ---------- camera ----------
 
-const LEVELS = [Level0, Level1, Level2, Level3, Level4];
-// Level j-1 sits inside level j at: x_j = A[j] + S[j] * x_{j-1}
-const S = [1, 0.3, 0.17, 0.024, 0.3];
+const LEVELS = [Level0, Level1, Level2];
+// Level j-1 sits inside level j at: x_j = A[j] + S[j] * x_{j-1}.
+// Level 3 is never drawn: it is screen space, where the middle of the buildings' string
+// (960, 380) lands on the frame centre, which is where Prague sits on the 3D Earth.
+const S = [1, 0.3, 0.17, 0.02];
 const A: P[] = [
   [0, 0],
   [960 - 960 * 0.3, 965 - 672 * 0.3],
   [960 - 960 * 0.17, 945 - 965 * 0.17],
-  [960 - 960 * 0.024, 160 - 945 * 0.024],
-  [520 - 960 * 0.3, 580 - 560 * 0.3],
+  [960 - 960 * 0.02, 540 - 380 * 0.02],
 ];
 
 type Tf = { k: number; x: number; y: number };
@@ -317,9 +233,9 @@ const apply = (m: Tf, n: Tf): Tf => ({ k: m.k * n.k, x: m.k * n.x + m.x, y: m.k 
 const up = (j: number): Tf => ({ k: S[j], x: A[j][0], y: A[j][1] }); // level j-1 -> level j
 const down = (j: number): Tf => ({ k: 1 / S[j], x: -A[j][0] / S[j], y: -A[j][1] / S[j] }); // level j -> j-1
 
-// u in [0, 4]: 0 = bots fill the frame, 4 = Earth & Mars.
+// u in [0, 3]: 0 = bots fill the frame, 3 = the buildings are a point of light.
 const transforms = (u: number): Tf[] => {
-  const i = Math.min(Math.floor(u), 3);
+  const i = Math.min(Math.floor(u), 2);
   const p = u - i;
   const s = S[i + 1];
   const f: P = [A[i + 1][0] / (1 - s), A[i + 1][1] / (1 - s)];
@@ -336,36 +252,48 @@ const IN: [number, number][] = [
   [99, 98],
   [2.3, 1.6],
   [2.4, 1.6],
-  [42, 24],
-  [2.1, 1.5],
 ];
 const OUT: [number, number][] = [
   [0.03, 0.012],
   [0.02, 0.008],
-  [0.008, 0.003],
-  [0, -1],
-  [0, -1],
+  [0.1, 0.045],
 ];
 
 export const worldU = (t: number, stages: number[]) => {
-  // stages = [start, end of L0->L1, ..., end of L3->L4]; eased per stage but never fully stops
+  // stages = [start, end of L0->L1, ...]; eased per stage but never fully stops
   if (t <= stages[0]) return 0;
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < stages.length - 1; i++) {
     if (t <= stages[i + 1]) {
       const x = (t - stages[i]) / (stages[i + 1] - stages[i]);
       return i + 0.3 * x + 0.7 * x * x * (3 - 2 * x);
     }
   }
-  return 4 + Math.min(t - stages[4], 1) * 0.04; // gentle drift after the last level
+  return stages.length - 1;
 };
 
 export const World: React.FC<{ t: number; u: number }> = ({ t, u }) => {
   const tf = transforms(u);
-  const bg = interpolateColors(u, [0, 2.3, 2.55, 2.85], ["#ffffff", "#ffffff", "#9fc6ee", "#070a14"]);
-  const stars = ramp(u, 2.65, 3.05);
+  const bg = interpolateColors(u, [0, 2.2, 2.5, 2.75], ["#ffffff", "#ffffff", "#b9d4f0", "#000000"]);
+  const sky = ramp(u, 2.55, 2.95);
+  // the shrinking buildings become one warm point of light, which becomes Prague
+  const dot = ramp(u, 2.45, 2.75) * (1 - ramp(t, SPACE.in + 0.2, SPACE.in + 0.5));
   return (
     <AbsoluteFill style={{ background: bg, overflow: "hidden" }}>
-      {stars > 0 && <Stars t={t} opacity={stars} />}
+      {sky > 0 && (
+        <Img
+          src={staticFile("space/sky.jpg")}
+          style={{
+            position: "absolute",
+            width: 2560,
+            height: 1440,
+            left: -320 - (t - 23) * 22,
+            top: -180 + (t - 23) * 6,
+            transform: `scale(${1.08 - (t - 23) * 0.012})`,
+            opacity: sky,
+          }}
+        />
+      )}
+      {t >= SPACE.in - 0.05 && <Space t={t} />}
       {LEVELS.map((L, j) => {
         const m = tf[j];
         const o = Math.min(
@@ -391,22 +319,20 @@ export const World: React.FC<{ t: number; u: number }> = ({ t, u }) => {
           </div>
         );
       }).reverse()}
+      {dot > 0 && (
+        <div
+          style={{
+            position: "absolute",
+            left: 960 - 60,
+            top: 540 - 60,
+            width: 120,
+            height: 120,
+            borderRadius: 120,
+            background: "radial-gradient(#fff 0%, #ffd79a 18%, rgba(255,196,107,0.35) 40%, rgba(255,196,107,0) 70%)",
+            opacity: dot,
+          }}
+        />
+      )}
     </AbsoluteFill>
   );
 };
-
-const STARS = Array.from({ length: 240 }, (_, i) => {
-  const r = (n: number) => {
-    const s = Math.sin(i * 12.9898 + n * 78.233) * 43758.5453;
-    return s - Math.floor(s);
-  };
-  return { x: r(1) * 1920, y: r(2) * 1080, s: 0.6 + r(3) * 1.8, p: r(4) * 6.28, b: 0.35 + r(5) * 0.65 };
-});
-const Stars: React.FC<{ t: number; opacity: number }> = ({ t, opacity }) => (
-  <svg width={1920} height={1080} style={{ position: "absolute", opacity }}>
-    {STARS.map((s, i) => (
-      <circle key={i} cx={s.x} cy={s.y} r={s.s} fill="#fff" opacity={s.b * (0.75 + 0.25 * Math.sin(t * 3 + s.p))} />
-    ))}
-  </svg>
-);
-

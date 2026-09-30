@@ -6,7 +6,7 @@ import { AppScene, MSGS, T } from "./app";
 import { EndCard, TinCanScene } from "./scenes";
 import { World, worldU } from "./world";
 
-const STAGES = [20.3, 22.1, 23.9, 26.0, 27.6]; // zoom-out levels
+const STAGES = [19.9, 21.3, 22.55, 23.6]; // zoom-out: bots -> people -> buildings -> city light
 const END = 28.0;
 
 // [start second, file, volume]
