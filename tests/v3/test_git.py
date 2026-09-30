@@ -68,7 +68,7 @@ class GitCase(unittest.TestCase):
 
 class RequireTests(GitCase):
     def test_require_repo_accepts_a_work_tree(self) -> None:
-        self.assertIsNone(git.require_repo(self.seeded()))
+        git.require_repo(self.seeded())
 
     def test_require_repo_dies_outside_a_work_tree(self) -> None:
         plain = self.root / "plain"
@@ -77,7 +77,7 @@ class RequireTests(GitCase):
             git.require_repo(plain)
 
     def test_require_branch_accepts_the_room_branch(self) -> None:
-        self.assertIsNone(git.require_branch(self.seeded(), "master"))
+        git.require_branch(self.seeded(), "master")
 
     def test_require_branch_dies_on_another_branch(self) -> None:
         work = self.seeded()
@@ -87,8 +87,9 @@ class RequireTests(GitCase):
         self.assertIn("master", str(caught.exception))
 
     def test_require_repo_dies_when_the_root_is_missing(self) -> None:
-        with self.assertRaises(ProtocolError):
+        with self.assertRaises(ProtocolError) as caught:
             git.require_repo(self.root / "gone")
+        self.assertIn("not a directory", str(caught.exception))
 
     def test_a_missing_git_binary_says_so(self) -> None:
         work = self.seeded()
@@ -105,7 +106,11 @@ class RequireTests(GitCase):
 
 class PullTests(GitCase):
     def test_pull_is_quiet_when_the_remote_has_no_commits(self) -> None:
-        self.assertIsNone(git.pull(self.clone("work")))
+        work = self.clone("work")
+        git.pull(work)
+        self.assertEqual(
+            self.git(work, "rev-list", "--count", "--all").stdout.strip(), "0"
+        )
 
     def test_pull_is_quiet_when_the_branch_has_no_upstream_and_no_remote_branch(
         self,
@@ -114,7 +119,23 @@ class PullTests(GitCase):
         work.mkdir()
         self.git(work, "init", "-b", "master")
         self.git(work, "remote", "add", "origin", str(self.remote))
-        self.assertIsNone(git.pull(work))
+        git.pull(work)
+        self.assertEqual(
+            self.git(work, "rev-list", "--count", "--all").stdout.strip(), "0"
+        )
+
+    def test_pull_is_quiet_without_a_remote(self) -> None:
+        work = self.root / "lonely"
+        work.mkdir()
+        self.git(work, "init", "-b", "master")
+        git.pull(work)
+        self.assertEqual(self.git(work, "remote").stdout.strip(), "")
+
+    def test_pull_dies_on_a_detached_head(self) -> None:
+        work = self.seeded()
+        self.git(work, "checkout", "--detach")
+        with self.assertRaises(ProtocolError):
+            git.pull(work)
 
     def test_pull_fast_forwards_after_another_clone_pushed(self) -> None:
         work = self.seeded()
@@ -209,6 +230,21 @@ class CommitOwnedTests(GitCase):
         git.commit_owned(work, [out], "carol 1 again", ROSTER)
         self.assertEqual(self.commits(work), before)
 
+    def test_commit_owned_records_a_deleted_owned_file(self) -> None:
+        work = self.seeded()
+        who = self.write(work, "who/carol.json", '{"mode": "daemon"}\n')
+        git.commit_owned(work, [who], "carol who", ROSTER)
+        who.unlink()
+        git.commit_owned(work, [who], "carol left", ROSTER)
+        named = self.git(work, "show", "--name-only", "--format=", "HEAD").stdout
+        self.assertIn(".tincan/who/carol.json", named)
+        self.assertNotIn("who/carol.json", self.git(work, "ls-files").stdout)
+
+    def test_commit_owned_refuses_a_path_outside_the_root(self) -> None:
+        work = self.seeded()
+        with self.assertRaises(ProtocolError):
+            git.commit_owned(work, [self.root / "remote.git" / "HEAD"], "nope", ROSTER)
+
     def test_commit_owned_takes_a_path_relative_to_the_root(self) -> None:
         work = self.seeded()
         self.write(work, "out/carol.ndjson", '{"seq":1}\n')
@@ -247,7 +283,12 @@ class PushTests(GitCase):
             git.push(work)
 
     def test_push_is_quiet_with_nothing_to_send(self) -> None:
-        self.assertIsNone(git.push(self.seeded()))
+        work = self.seeded()
+        before = self.git(self.remote, "rev-parse", "master").stdout.strip()
+        git.push(work)
+        self.assertEqual(
+            self.git(self.remote, "rev-parse", "master").stdout.strip(), before
+        )
 
     def test_push_dies_without_a_remote(self) -> None:
         work = self.root / "lonely"
