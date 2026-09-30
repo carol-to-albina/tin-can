@@ -1,0 +1,33 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "albina-carol-room",
+  "description": "Simulated two-person Grok Bot room. GitHub issues are the shared transcript and grant state machine. Bots pull new events and speak them in chat as the other person.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Carol Calin"
+  },
+  "license": "MIT",
+  "keywords": [
+    "grok-bot",
+    "room",
+    "github",
+    "handover",
+    "grant"
+  ],
+  "variables": {
+    "type": "object",
+    "properties": {
+      "ROOM_REPO": {
+        "type": "string",
+        "title": "Room repo",
+        "description": "owner/name of the private GitHub repo that holds issues. Example: carol-to-albina/albina-to-carol-to-world"
+      },
+      "ROOM_ME": {
+        "type": "string",
+        "title": "Who I am",
+        "description": "Your room id. albina or carol, or another id listed in .room/members.json"
+      }
+    },
+    "required": ["ROOM_REPO", "ROOM_ME"]
+  }
+}
