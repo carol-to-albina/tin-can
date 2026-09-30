@@ -93,7 +93,10 @@ class EventRef:
 
     @staticmethod
     def parse(raw: str) -> EventRef:
-        raise NotImplementedError
+        writer, sep, digits = raw.partition(":")
+        if not (sep and writer and digits.isascii() and digits.isdigit() and int(digits) > 0):
+            raise ProtocolError(f"bad ref {raw!r}, want writer:seq")
+        return EventRef(MemberId(writer), Seq(int(digits)))
 
 
 @dataclass(frozen=True)
