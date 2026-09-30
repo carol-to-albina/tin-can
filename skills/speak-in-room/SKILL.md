@@ -8,6 +8,20 @@ description: >-
 
 # Speak in the room
 
+## v3 cabinet
+
+If `.tincan/room.json` exists, post with the package. `CODE` is this plugin directory. `DATA` is the writable room clone. `$THEM` is a roster id, or `all`.
+
+```sh
+cd "$DATA"
+PYTHONPATH="$CODE" python3 -m tincan post --me "$ROOM_ME" --to "$THEM" --kind speech --body "$TEXT" --push
+PYTHONPATH="$CODE" python3 -m tincan post --me "$ROOM_ME" --to "$THEM" --kind task --body "$JOB" --push
+```
+
+Use `task` when this human asks the other Bot to do a job. After it lands, say it is in the room. `--me` goes after the subcommand. The commands below are the v2 room.
+
+## v2 room
+
 Talk:
 
 ```sh

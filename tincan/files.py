@@ -332,7 +332,20 @@ def format_position(pos: Position) -> str:
 
 def load_all_events(root: Path, members: dict[MemberId, Member]) -> list[Event]:
     """Every member's outbox, concatenated in roster order. Not sorted."""
-    raise NotImplementedError
+    events: list[Event] = []
+    for member in members:
+        events.extend(load_outbox(root, member))
+    by_ref = {event.meta.ref(): event for event in events}
+    for event in events:
+        if event.kind not in (Kind.COT, Kind.RECEIPT):
+            continue
+        target = by_ref.get(event.ref)
+        if target is None or target.kind is not Kind.GRANT_REQUEST:
+            raise ProtocolError(
+                f"{event.meta.writer} line {int(event.meta.seq)} "
+                f"ref {event.ref} is not a grant_request"
+            )
+    return events
 
 
 def build_event(
@@ -406,6 +419,18 @@ def find_cabinet(start: Path) -> Path:
     raise ProtocolError(f"no .tincan/room.json at or above {here}")
 
 
+def _write_json(path: Path, data: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
+def _capability_list(raw: Any) -> list[str]:
+    if isinstance(raw, list):
+        return [str(item).strip() for item in raw if str(item).strip()]
+    text = str(raw or "").replace(",", " ")
+    return [part for part in text.split() if part]
+
+
 def migrate_v2(root: Path, host: MemberId) -> list[Path]:
     """Host-only, one wave. Read .room/, write .tincan/.
 
@@ -415,4 +440,121 @@ def migrate_v2(root: Path, host: MemberId) -> list[Path]:
     Refuse when .tincan/ already exists.
     Returns the sorted paths that must be committed together.
     """
-    raise NotImplementedError
+    root = Path(root)
+    cabinet = cabinet_dir(root)
+    if cabinet.exists():
+        raise ProtocolError(f"{cabinet} already exists")
+    source = root / ".room" / "members.json"
+    if not source.exists():
+        raise ProtocolError(f"missing {source}")
+    data = _object(source.read_text(encoding="utf-8"), ".room/members.json")
+    roster = data.get("members")
+    if not isinstance(roster, dict) or not roster:
+        raise ProtocolError(".room/members.json needs a members object")
+    host_id = MemberId(str(host))
+    if host_id not in roster:
+        raise ProtocolError(f"host {host_id} is not in .room/members.json")
+    repo = str(data.get("repo") or "")
+    if not repo:
+        raise ProtocolError(".room/members.json has no repo")
+    cabinet.mkdir(parents=True)
+    (cabinet / ".gitignore").write_text("local/\n", encoding="utf-8")
+    for name in ("who", "out", "pos", "local"):
+        (cabinet / name).mkdir(exist_ok=True)
+    _write_json(
+        room_path(root),
+        {
+            "protocol": PROTOCOL,
+            "room": str(data.get("room") or "tincan"),
+            "repo": repo,
+            "branch": str(data.get("branch") or "master"),
+            "host": str(host_id),
+            "members": roster,
+        },
+    )
+    id_map: dict[str, str] = {}
+    stored: dict[str, list[tuple[int, dict[str, Any]]]] = {}
+    for member in roster:
+        path = root / ".room" / "out" / f"{member}.ndjson"
+        rows: list[tuple[int, dict[str, Any]]] = []
+        seq = 0
+        if path.exists():
+            for raw in _nonblank(path):
+                seq += 1
+                row = _object(raw, f".room/out/{member}.ndjson")
+                old = str(row.get("id") or "")
+                if old:
+                    id_map[old] = f"{member}:{seq}"
+                rows.append((seq, row))
+        stored[str(member)] = rows
+    aliases = {"grant-request": "grant_request"}
+    for member, rows in stored.items():
+        if not rows:
+            continue
+        lines: list[str] = []
+        for seq, row in rows:
+            kind = aliases.get(str(row.get("kind") or ""), str(row.get("kind") or ""))
+            status = str(row.get("grant_status") or "")
+            if kind == "grant" and status == "denied":
+                kind = "deny"
+            elif kind == "grant" and status == "revoked":
+                kind = "revoke"
+            if kind not in {item.value for item in Kind}:
+                raise ProtocolError(f"{member} line {seq} has unknown kind {kind!r}")
+            grant_id = str(row.get("grant_id") or "")
+            ref = id_map.get(grant_id, "") if grant_id else ""
+            out: dict[str, Any] = {
+                "seq": seq,
+                "ts": str(row.get("ts") or ""),
+                "to": str(row.get("to") or ""),
+                "kind": kind,
+            }
+            body = str(row.get("body") or "")
+            if body:
+                out["body"] = body
+            if ref:
+                out["ref"] = ref
+            caps = _capability_list(row.get("capabilities"))
+            if caps:
+                out["capabilities"] = caps
+            expires = str(row.get("expires") or "")
+            if expires:
+                out["expires"] = expires
+            lines.append(json.dumps(out, ensure_ascii=False, separators=(",", ":")))
+        dest = out_path(root, MemberId(member))
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    for member in roster:
+        seen = {
+            MemberId(writer): Seq(rows[-1][0])
+            for writer, rows in stored.items()
+            if rows
+        }
+        write_position(root, Position(MemberId(str(member)), seen))
+        hook = root / ".room" / "hook" / f"{member}.json"
+        if not hook.exists():
+            continue
+        hooked = _object(hook.read_text(encoding="utf-8"), f".room/hook/{member}.json")
+        _write_json(
+            who_path(root, MemberId(str(member))),
+            {
+                "wake": {
+                    "type": "http",
+                    "url": str(hooked.get("url") or ""),
+                    "key": str(hooked.get("key") or ""),
+                }
+            },
+        )
+    workflow = root / ".github" / "workflows" / "tincan-notify.yml"
+    if workflow.exists():
+        text = workflow.read_text(encoding="utf-8")
+        updated = text.replace(".room/out/**", ".tincan/out/**").replace(
+            "python3 scripts/tincan.py hook-notify",
+            "python3 -m tincan notify",
+        )
+        if updated != text:
+            workflow.write_text(updated, encoding="utf-8")
+    paths = [path for path in cabinet.rglob("*") if path.is_file() and "local" not in path.relative_to(cabinet).parts]
+    if workflow.exists():
+        paths.append(workflow)
+    return sorted(paths, key=lambda path: str(path.relative_to(root)))

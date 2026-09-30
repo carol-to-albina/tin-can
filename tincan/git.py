@@ -32,7 +32,11 @@ class GitMissing(ProtocolError):
     """The git binary is not on PATH."""
 
 
-def _run(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
+def _run(
+    root: Path,
+    *args: str,
+    env: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
     if not Path(root).is_dir():
         raise ProtocolError(f"{root} is not a directory")
     try:
@@ -41,9 +45,25 @@ def _run(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
             cwd=root,
             capture_output=True,
             text=True,
+            env=env,
         )
     except FileNotFoundError as exc:
         raise GitMissing("git is not installed") from exc
+
+
+def _without_author_env() -> dict[str, str]:
+    """Room.json's login is the author. A shell GIT_AUTHOR_* must not win."""
+    env = os.environ.copy()
+    for key in (
+        "GIT_AUTHOR_NAME",
+        "GIT_AUTHOR_EMAIL",
+        "GIT_AUTHOR_DATE",
+        "GIT_COMMITTER_NAME",
+        "GIT_COMMITTER_EMAIL",
+        "GIT_COMMITTER_DATE",
+    ):
+        env.pop(key, None)
+    return env
 
 
 def _why(run: subprocess.CompletedProcess[str]) -> str:
@@ -209,6 +229,7 @@ def commit_owned(root: Path, paths: list[Path], message: str, author: GitAuthor)
         message,
         "--",
         *specs,
+        env=_without_author_env(),
     )
     if commit.returncode != 0:
         raise ProtocolError(_why(commit))

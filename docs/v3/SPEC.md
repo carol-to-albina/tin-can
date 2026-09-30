@@ -76,7 +76,7 @@ Wake payloads use the same string. There is no content hash.
 | `cot` | yes | Hidden chain of thought under a live grant. |
 | `receipt` | yes | Receipt under a live grant. |
 
-A parser refuses a ref-kind with no `ref`. A parser refuses a `cot` or `receipt` whose `ref` is not a `grant_request`. On a ref-kind, `to` is the writer of the referenced line.
+A parser refuses a ref-kind with no `ref`. A parser refuses a `cot` or `receipt` whose `ref` is not a `grant_request`. On a ref-kind, `to` is the writer of the referenced line. Stamp that line's `ts` strictly after the referenced line so merge order `(ts, writer, seq)` applies the target first.
 
 ## Member policy
 
