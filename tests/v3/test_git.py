@@ -10,6 +10,8 @@ from unittest import mock
 from tincan import git
 from tincan.types import ConflictError, ProtocolError
 
+ROSTER = git.GitAuthor("rainbowpuffpuff", "rainbowpuffpuff@users.noreply.github.com")
+
 
 class GitCase(unittest.TestCase):
     def setUp(self) -> None:
@@ -137,6 +139,69 @@ class PullTests(GitCase):
         self.git(fork, "commit", "-m", "carol 1")
         with self.assertRaises(ConflictError):
             git.pull(fork)
+
+
+class CommitOwnedTests(GitCase):
+    def commits(self, work: Path) -> int:
+        return int(self.git(work, "rev-list", "--count", "HEAD").stdout.strip())
+
+    def author(self, work: Path) -> tuple[str, str]:
+        line = self.git(work, "log", "-1", "--format=%an%x09%ae").stdout.strip()
+        name, _, email = line.partition("\t")
+        return name, email
+
+    def test_commit_owned_stamps_the_roster_login_over_git_config(self) -> None:
+        work = self.seeded()
+        out = self.write(work, "out/carol.ndjson", '{"seq":1}\n')
+        git.commit_owned(work, [out], "carol 1", ROSTER)
+        self.assertEqual(
+            self.author(work),
+            ("rainbowpuffpuff", "rainbowpuffpuff@users.noreply.github.com"),
+        )
+        self.assertEqual(
+            self.git(work, "config", "user.name").stdout.strip(), "Carol Calin"
+        )
+
+    def test_commit_owned_twice_on_identical_bytes_makes_one_commit(self) -> None:
+        work = self.seeded()
+        out = self.write(work, "out/carol.ndjson", '{"seq":1}\n')
+        before = self.commits(work)
+        git.commit_owned(work, [out], "carol 1", ROSTER)
+        git.commit_owned(work, [out], "carol 1", ROSTER)
+        self.assertEqual(self.commits(work), before + 1)
+
+    def test_commit_owned_leaves_dirty_files_outside_paths(self) -> None:
+        work = self.seeded()
+        out = self.write(work, "out/carol.ndjson", '{"seq":1}\n')
+        self.write(work, "out/albina.ndjson", '{"seq":1}\n')
+        git.commit_owned(work, [out], "carol 1", ROSTER)
+        named = self.git(work, "show", "--name-only", "--format=", "HEAD").stdout
+        self.assertIn(".tincan/out/carol.ndjson", named)
+        self.assertNotIn("albina", named)
+        self.assertIn("albina", self.git(work, "status", "--porcelain").stdout)
+
+    def test_commit_owned_skips_an_owned_path_that_does_not_exist(self) -> None:
+        work = self.seeded()
+        out = self.write(work, "out/carol.ndjson", '{"seq":1}\n')
+        who = work / ".tincan" / "who" / "carol.json"
+        git.commit_owned(work, [out, who], "carol 1", ROSTER)
+        named = self.git(work, "show", "--name-only", "--format=", "HEAD").stdout
+        self.assertIn(".tincan/out/carol.ndjson", named)
+
+    def test_commit_owned_commits_nothing_when_no_owned_path_is_dirty(self) -> None:
+        work = self.seeded()
+        out = self.write(work, "out/carol.ndjson", '{"seq":1}\n')
+        git.commit_owned(work, [out], "carol 1", ROSTER)
+        before = self.commits(work)
+        git.commit_owned(work, [out], "carol 1 again", ROSTER)
+        self.assertEqual(self.commits(work), before)
+
+    def test_commit_owned_takes_a_path_relative_to_the_root(self) -> None:
+        work = self.seeded()
+        self.write(work, "out/carol.ndjson", '{"seq":1}\n')
+        git.commit_owned(work, [Path(".tincan/out/carol.ndjson")], "carol 1", ROSTER)
+        named = self.git(work, "show", "--name-only", "--format=", "HEAD").stdout
+        self.assertIn(".tincan/out/carol.ndjson", named)
 
 
 if __name__ == "__main__":

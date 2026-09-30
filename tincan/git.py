@@ -48,6 +48,20 @@ def _upstream(root: Path) -> str:
     return run.stdout.strip() if run.returncode == 0 else ""
 
 
+def _pathspec(root: Path, path: Path) -> str:
+    """A path already under the root stays as given. An absolute path is relativized."""
+    if not Path(path).is_absolute():
+        return str(path)
+    try:
+        return str(Path(path).resolve().relative_to(Path(root).resolve()))
+    except ValueError:
+        raise ProtocolError(f"{path} is outside {root}") from None
+
+
+def _tracked(root: Path, spec: str) -> bool:
+    return _run(root, "ls-files", "--error-unmatch", "--", spec).returncode == 0
+
+
 def _remote(root: Path) -> str:
     run = _run(root, "remote")
     names = run.stdout.split() if run.returncode == 0 else []
@@ -97,7 +111,35 @@ def commit_owned(root: Path, paths: list[Path], message: str, author: GitAuthor)
     author comes from room.json, not from git config. No-op if the index is
     unchanged. Same dirty bytes become the same commit.
     """
-    raise NotImplementedError
+    require_repo(root)
+    specs = [
+        spec
+        for spec in (_pathspec(root, p) for p in paths)
+        if (root / spec).exists() or _tracked(root, spec)
+    ]
+    if not specs:
+        return
+    add = _run(root, "add", "--", *specs)
+    if add.returncode != 0:
+        raise ProtocolError(_why(add))
+    staged = _run(root, "diff", "--cached", "--quiet", "--", *specs)
+    if staged.returncode == 0:
+        return
+    commit = _run(
+        root,
+        "-c",
+        f"user.name={author.name}",
+        "-c",
+        f"user.email={author.email}",
+        "commit",
+        "--only",
+        "-m",
+        message,
+        "--",
+        *specs,
+    )
+    if commit.returncode != 0:
+        raise ProtocolError(_why(commit))
 
 
 def push(root: Path) -> None:
