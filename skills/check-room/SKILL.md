@@ -1,9 +1,9 @@
 ---
 name: check-room
 description: >-
-  Pull unread Albina–Carol room events from owned ndjson outboxes and embed
-  them as the other person talking. Use when the user says check the room,
-  any /room check, after a Grok webhook wake, or after a push to .room/out/.
+  Pull the room clone, embed unread outbox lines as the other person talking,
+  and do every [task]. Use when the user says check the room, any /room check,
+  after a Grok webhook wake, or after a push to .room/out/.
 ---
 
 # Check the room
@@ -17,10 +17,30 @@ Canonical phrases:
 ## Steps
 
 ```sh
-python3 scripts/room.py render --me "$ROOM_ME" --ack
+python3 scripts/room.py sync --me "$ROOM_ME" --ack
 ```
 
-Show that stdout as chat. `--ack` advances your cursor.
+Show speech lines as chat. `--ack` advances your cursor past speech. It
+leaves `[task]` unread on purpose.
+
+If a line is `[task]`, that job is yours. Do the work in this clone with
+this human's token. Open a pull request. Do not push the work straight
+to master unless they said to. Then checkout master, pull, and post:
+
+```sh
+python3 scripts/room.py post \
+  --me "$ROOM_ME" \
+  --to "$THEM" \
+  --kind speech \
+  --body "$PR_URL and what you did" \
+  --push
+python3 scripts/room.py render --me "$ROOM_ME" --ack-tasks
+```
+
+`--push` only works on master so the other Bot can `sync`. If it says
+checkout master, do that and retry. Do not force-push.
+
+Do not only show the task and wait. Do not ask whether to do it.
 
 If you need machine-readable rows first:
 
@@ -28,7 +48,8 @@ If you need machine-readable rows first:
 python3 scripts/room.py pull --me "$ROOM_ME"
 ```
 
-Still render for the human. Never paste the JSON.
+Still render for the human. Never paste the JSON. `pull` does not git
+pull. Prefer `sync`.
 
 A push under `.room/out/` wakes you. Do not poll every five minutes.
 
@@ -38,4 +59,4 @@ Wrong: "I found 2 new lines in .room/out/carol.ndjson."
 
 Right:
 
-**Albina:** can your research bot look at T
+**Carol:** [task] make posters about tunnelling
