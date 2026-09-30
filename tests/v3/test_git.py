@@ -3,7 +3,9 @@ from __future__ import annotations
 import os
 import subprocess
 import tempfile
+import threading
 import unittest
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from unittest import mock
 
@@ -318,6 +320,79 @@ class AddedSinceTests(GitCase):
         out = self.write(work, "out/carol.ndjson", '{"seq":1}\n')
         with self.assertRaises(ProtocolError):
             git.added_since(work, out, "c0ffee" * 6 + "abcd")
+
+
+class RemoteTests(GitCase):
+    def api(self, body: bytes, status: int = 200) -> tuple[list[str], str]:
+        asked: list[str] = []
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self) -> None:
+                asked.append(self.path)
+                self.send_response(status)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *args: object) -> None:
+                pass
+
+        server = HTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(thread.join)
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        base = f"http://127.0.0.1:{server.server_address[1]}"
+        patcher = mock.patch.dict(os.environ, {"TINCAN_GITHUB_API": base})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        return asked, base
+
+    def github(self, work: Path, url: str) -> None:
+        self.git(work, "remote", "set-url", "origin", url)
+
+    def test_remote_url_returns_the_origin_url(self) -> None:
+        self.assertEqual(git.remote_url(self.clone("work")), str(self.remote))
+
+    def test_remote_url_is_empty_without_a_remote(self) -> None:
+        work = self.root / "lonely"
+        work.mkdir()
+        self.git(work, "init", "-b", "master")
+        self.assertEqual(git.remote_url(work), "")
+
+    def test_remote_is_public_when_the_api_says_private_false(self) -> None:
+        work = self.clone("work")
+        self.github(work, "https://github.com/carol-to-albina/tincan.git")
+        asked, _ = self.api(b'{"private": false}')
+        self.assertTrue(git.remote_is_public(work))
+        self.assertEqual(asked, ["/repos/carol-to-albina/tincan"])
+
+    def test_remote_is_private_when_the_api_says_private_true(self) -> None:
+        work = self.clone("work")
+        self.github(work, "git@github.com:carol-to-albina/tincan.git")
+        asked, _ = self.api(b'{"private": true}')
+        self.assertFalse(git.remote_is_public(work))
+        self.assertEqual(asked, ["/repos/carol-to-albina/tincan"])
+
+    def test_remote_is_private_on_a_remote_that_is_not_github(self) -> None:
+        work = self.clone("work")
+        asked, _ = self.api(b'{"private": false}')
+        self.assertFalse(git.remote_is_public(work))
+        self.assertEqual(asked, [])
+
+    def test_remote_is_private_when_the_api_body_is_not_json(self) -> None:
+        work = self.clone("work")
+        self.github(work, "https://github.com/carol-to-albina/tincan.git")
+        self.api(b"<html>rate limited</html>")
+        self.assertFalse(git.remote_is_public(work))
+
+    def test_remote_is_private_when_the_api_fails(self) -> None:
+        work = self.clone("work")
+        self.github(work, "https://github.com/carol-to-albina/tincan.git")
+        self.api(b'{"message": "Not Found"}', status=404)
+        self.assertFalse(git.remote_is_public(work))
 
 
 if __name__ == "__main__":
