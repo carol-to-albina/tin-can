@@ -204,5 +204,45 @@ class CommitOwnedTests(GitCase):
         self.assertIn(".tincan/out/carol.ndjson", named)
 
 
+class PushTests(GitCase):
+    def test_push_sets_upstream_on_the_first_push(self) -> None:
+        work = self.clone("work")
+        out = self.write(work, "out/carol.ndjson", '{"seq":1}\n')
+        git.commit_owned(work, [out], "carol 1", ROSTER)
+        git.push(work)
+        self.assertEqual(
+            self.git(
+                work, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"
+            ).stdout.strip(),
+            "origin/master",
+        )
+        self.assertIn(
+            "refs/heads/master",
+            self.git(self.root, "ls-remote", "--heads", str(self.remote)).stdout,
+        )
+
+    def test_push_raises_conflict_when_the_remote_moved(self) -> None:
+        work = self.seeded()
+        other = self.clone("other")
+        self.write(other, "out/albina.ndjson", '{"seq":1}\n')
+        self.git(other, "add", "--", ".tincan/out/albina.ndjson")
+        self.git(other, "commit", "-m", "albina 1")
+        self.git(other, "push")
+        out = self.write(work, "out/carol.ndjson", '{"seq":1}\n')
+        git.commit_owned(work, [out], "carol 1", ROSTER)
+        with self.assertRaises(ConflictError):
+            git.push(work)
+
+    def test_push_is_quiet_with_nothing_to_send(self) -> None:
+        self.assertIsNone(git.push(self.seeded()))
+
+    def test_push_dies_without_a_remote(self) -> None:
+        work = self.root / "lonely"
+        work.mkdir()
+        self.git(work, "init", "-b", "master")
+        with self.assertRaises(ProtocolError):
+            git.push(work)
+
+
 if __name__ == "__main__":
     unittest.main()
