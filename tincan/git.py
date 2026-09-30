@@ -2,11 +2,20 @@
 
 from __future__ import annotations
 
+import json
+import os
 import subprocess
+import urllib.error
+import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import urlparse
 
 from .types import ConflictError, ProtocolError, Seq
+
+GITHUB_API_ENV = "TINCAN_GITHUB_API"
+GITHUB_API = "https://api.github.com"
+API_TIMEOUT_SEC = 5
 
 
 @dataclass(frozen=True)
@@ -75,6 +84,25 @@ def _read(path: Path) -> str:
 
 def _nonblank(text: str) -> int:
     return sum(1 for raw in text.splitlines() if raw.strip())
+
+
+def _github_slug(url: str) -> str:
+    """owner/repo for a github.com remote. Empty for any other host."""
+    raw = url.strip()
+    if not raw:
+        return ""
+    if "://" in raw:
+        parsed = urlparse(raw)
+        host, path = parsed.hostname or "", parsed.path
+    else:
+        head, _, path = raw.partition(":")
+        host = head.rpartition("@")[2]
+    if host.lower().removeprefix("www.") != "github.com":
+        return ""
+    parts = [part for part in path.strip("/").split("/") if part]
+    if len(parts) != 2:
+        return ""
+    return f"{parts[0]}/{parts[1].removesuffix('.git')}"
 
 
 def _line_of_seq(path: Path, seq: Seq) -> int:
@@ -232,8 +260,30 @@ def added_since(root: Path, path: Path, before_rev: str) -> list[int]:
 
 
 def remote_url(root: Path) -> str:
-    raise NotImplementedError
+    require_repo(root)
+    remote = _remote(root)
+    if not remote:
+        return ""
+    run = _run(root, "remote", "get-url", remote)
+    return run.stdout.strip() if run.returncode == 0 else ""
 
 
 def remote_is_public(root: Path) -> bool:
-    raise NotImplementedError
+    """True only when the GitHub API answers private false. Anything else is private."""
+    slug = _github_slug(remote_url(root))
+    if not slug:
+        return False
+    base = (os.environ.get(GITHUB_API_ENV) or GITHUB_API).rstrip("/")
+    try:
+        request = urllib.request.Request(
+            f"{base}/repos/{slug}",
+            headers={"Accept": "application/vnd.github+json", "User-Agent": "tincan"},
+        )
+        with urllib.request.urlopen(request, timeout=API_TIMEOUT_SEC) as answer:
+            body = json.loads(answer.read().decode("utf-8"))
+    except urllib.error.HTTPError as refused:
+        refused.close()
+        return False
+    except (OSError, ValueError, TimeoutError):
+        return False
+    return isinstance(body, dict) and body.get("private") is False
