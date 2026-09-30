@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-from .types import Seq
+from .types import ProtocolError, Seq
 
 
 @dataclass(frozen=True)
@@ -14,13 +15,45 @@ class GitAuthor:
     email: str
 
 
+class GitMissing(ProtocolError):
+    """The git binary is not on PATH."""
+
+
+def _run(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    if not Path(root).is_dir():
+        raise ProtocolError(f"{root} is not a directory")
+    try:
+        return subprocess.run(
+            ["git", *args],
+            cwd=root,
+            capture_output=True,
+            text=True,
+        )
+    except FileNotFoundError as exc:
+        raise GitMissing("git is not installed") from exc
+
+
+def _why(run: subprocess.CompletedProcess[str]) -> str:
+    return run.stderr.strip() or run.stdout.strip() or "git failed"
+
+
+def _head_branch(root: Path) -> str:
+    run = _run(root, "symbolic-ref", "--quiet", "--short", "HEAD")
+    return run.stdout.strip() if run.returncode == 0 else ""
+
+
 def require_repo(root: Path) -> None:
-    raise NotImplementedError
+    run = _run(root, "rev-parse", "--is-inside-work-tree")
+    if run.returncode != 0 or run.stdout.strip() != "true":
+        raise ProtocolError(f"{root} is not a git work tree")
 
 
 def require_branch(root: Path, branch: str) -> None:
     """Die unless HEAD equals the room branch."""
-    raise NotImplementedError
+    require_repo(root)
+    head = _head_branch(root)
+    if head != branch:
+        raise ProtocolError(f"HEAD is {head or 'detached'}; checkout {branch}")
 
 
 def pull(root: Path) -> None:
