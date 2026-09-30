@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
@@ -292,21 +294,45 @@ def append_outbox(root: Path, event: Event) -> Path:
 
 def load_position(root: Path, me: MemberId) -> Position:
     """Missing file is seen={}."""
-    raise NotImplementedError
+    path = pos_path(root, me)
+    raw = path.read_text(encoding="utf-8") if path.exists() else ""
+    return parse_position(me, raw)
 
 
 def write_position(root: Path, pos: Position) -> Path:
     """Write to a temp file in the same dir, then rename onto pos/<me>."""
-    raise NotImplementedError
+    path = pos_path(root, pos.me)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    handle, temp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.")
+    try:
+        with os.fdopen(handle, "w", encoding="utf-8") as f:
+            f.write(format_position(pos))
+        os.replace(temp, path)
+    except BaseException:
+        Path(temp).unlink(missing_ok=True)
+        raise
+    return path
 
 
 def parse_position(me: MemberId, raw: str) -> Position:
-    raise NotImplementedError
+    seen: dict[MemberId, Seq] = {}
+    for line in raw.splitlines():
+        if not line.strip():
+            continue
+        columns = line.split(" ")
+        if len(columns) != 2 or not columns[0] or not columns[1].isascii() or not columns[1].isdigit():
+            raise ProtocolError(f"pos/{me} line {line!r} is not writer then seq")
+        writer = MemberId(columns[0])
+        if writer in seen:
+            raise ProtocolError(f"pos/{me} names {columns[0]} twice")
+        seen[writer] = Seq(int(columns[1]))
+    return Position(me, seen)
 
 
 def format_position(pos: Position) -> str:
     """Two columns, writer then seq."""
-    raise NotImplementedError
+    rows = sorted((str(writer), int(seq)) for writer, seq in pos.seen.items())
+    return "".join(f"{writer} {seq}\n" for writer, seq in rows)
 
 
 def merge_order(event: Event) -> tuple[str, str, int]:
