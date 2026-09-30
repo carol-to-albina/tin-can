@@ -284,6 +284,7 @@ class Bots:
         self.files: dict[str, dict] = {}
         self.errors: list[str] = []
         self.guard = threading.RLock()
+        self.generation = 0  # bumps on reset, so a turn still waiting on the model from before is dropped
         self.state_path = files_dir.parent / f"{files_dir.name}-chats.json"
         self._load_files()
         self._load_state()
@@ -291,6 +292,7 @@ class Bots:
     # ---------- public ----------
     def reset(self) -> None:
         with self.guard:
+            self.generation += 1
             self.chats.clear()
             self.history.clear()
             self.errors.clear()
@@ -441,6 +443,7 @@ class Bots:
         tools = [t for t in TOOLS if t["function"]["name"] in allowed]
         prompt = "\n\n".join(parts)
         with self.guard:
+            generation = self.generation
             past = list(self.history.get(me, []))[-HISTORY:]
             if mode == "task":
                 self.working[accept] = time.time()
@@ -449,6 +452,8 @@ class Bots:
         finally:
             with self.guard:
                 self.working.pop(accept, None)
+        if generation != self.generation:
+            return  # the room was reset while this call ran
         trace["payer"] = payer
         if self.ledger:
             self.ledger.charge(payer, trace["cost"])

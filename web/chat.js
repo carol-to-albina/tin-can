@@ -502,7 +502,7 @@ function commands() {
   list.push({ label: "Show the QR code", run: showQR, group: "View" });
   list.push({ label: "Keyboard shortcuts", run: showShortcuts, group: "View" });
   list.push({ label: "Play the film (30 s)", run: () => window.open("/media/tincan-film.mp4", "_blank", "noopener"), group: "View" });
-  list.push({ label: "Watch the scripted run", run: () => window.open("/duet", "_blank", "noopener"), group: "View" });
+  list.push({ label: "Watch the scripted run", run: () => window.open("/duet?autoplay", "_blank", "noopener"), group: "View" });
   list.push({ label: "Open the room log", run: () => window.open("/log", "_blank", "noopener"), group: "View" });
   list.push({ label: "Switch theme", run: toggleTheme, group: "Settings" });
   if (S.isHost) list.push({ label: "Reset the room (everyone rejoins)", run: resetRoom, group: "Host" });

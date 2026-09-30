@@ -795,6 +795,7 @@ export class Room extends DurableObject {
 
   async turn(me, mode, { human = "", wake = [], accept = "", payer = "" } = {}) {
     payer ||= me;
+    const run = this.run?.id;
     if (!this.canSpend(payer)) {
       if (mode === "task") {
         const task = this.line(accept) || {};
@@ -846,6 +847,7 @@ export class Room extends DurableObject {
     } finally {
       if (key) delete this.mem.progress[key];
     }
+    if (!this.isLive && this.run?.id !== run) return; // the scripted run was restarted while this call ran
     const trace = { ...result.trace, payer };
     if (this.isLive) await this.charge(payer, trace.cost);
 
@@ -1021,8 +1023,9 @@ export class Room extends DurableObject {
     };
   }
 
+  // Every start is a clean run. A new start replaces one in progress; its late answers are dropped in turn().
   async duetStart() {
-    if (this.run && Date.now() - this.run.at < 45000) throw new Refusal(429, "a run is already playing; watch that one");
+    if (this.run && Date.now() - this.run.at < 3000) throw new Refusal(429, "a run just started; give it a moment");
     await this.wipe({ keepSeats: true });
     const id = crypto.randomUUID();
     this.run = { id, at: Date.now() };

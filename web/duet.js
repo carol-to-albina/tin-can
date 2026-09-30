@@ -7,6 +7,7 @@ const COLORS = { albina: "#7c5cff", carol: "#e5484d" };
 
 let B = null;
 let playing = false;
+let clientRun = 0; // bumps on every Play, so an older script loop stops
 let started = 0;
 let clockTimer = 0;
 const seenLines = new Set();
@@ -163,9 +164,10 @@ function caption(text) {
   c.classList.add("fresh");
 }
 
-async function until(test, label, ms = 45000) {
+async function until(test, label, ms = 45000, mine = clientRun) {
   const deadline = Date.now() + ms;
   while (Date.now() < deadline) {
+    if (mine !== clientRun) throw new Error("restarted");
     await refresh();
     if (test()) return;
     await sleep(250);
@@ -192,11 +194,11 @@ const botMsgs = (me) => (B.bots.chats[me] || []).filter((m) => m.from === "bot")
 const hasLine = (writer, kind) => B.lines.some((l) => l.writer === writer && l.kind === kind);
 
 async function play() {
-  if (playing) return;
+  const mine = ++clientRun; // a newer Play makes this loop stop at its next wait
   playing = true;
-  $("#play").disabled = true;
   try {
     const { run, script } = await api("/api/duet/start", {});
+    if (mine !== clientRun) return;
     seenLines.clear();
     openTraces.clear();
     $("#wire-lines").innerHTML = "";
@@ -208,13 +210,13 @@ async function play() {
     caption("1 · Albina asks her own Grok for something only Carol has. The knot is already tied.");
     await typeInto("albina", script.albina);
     await api("/api/duet/say", { run, me: "albina", text: script.albina });
-    await until(() => hasLine("albina", "task"), "Albina's Grok");
+    await until(() => hasLine("albina", "task"), "Albina's Grok", 45000, mine);
     caption("2 · Albina's Grok calls send_task. The line lands in the room and wakes Carol's Grok.");
-    await until(() => B.bots.busy.carol || hasLine("carol", "claim"), "Carol's Grok");
+    await until(() => B.bots.busy.carol || hasLine("carol", "claim"), "Carol's Grok", 45000, mine);
     caption("3 · Permission was given up front, so Carol's Grok writes the HTML now and calls finish_task.");
-    await until(() => hasLine("carol", "done") || hasLine("carol", "fail"), "Carol's Grok to finish");
+    await until(() => hasLine("carol", "done") || hasLine("carol", "fail"), "Carol's Grok to finish", 45000, mine);
     caption("4 · The handover goes back through the room. Albina's Grok wakes.");
-    await until(() => botMsgs("albina").some((m) => m.wake), "Albina's Grok to wake");
+    await until(() => botMsgs("albina").some((m) => m.wake), "Albina's Grok to wake", 45000, mine);
 
     const secs = ((performance.now() - started) / 1000).toFixed(1);
     stopClock();
@@ -223,12 +225,14 @@ async function play() {
     const tools = B.bots.tools - base.tools;
     caption(`5 · Albina has the page. ${secs}s, ${calls} OpenRouter calls, ${tools} tool calls, $${(B.bots.spent - base.spent).toFixed(3)}. Tap any receipt to see the call.`);
   } catch (err) {
+    if (mine !== clientRun) return; // a newer Play owns the screen now
     stopClock();
     caption(`Stopped: ${err.message}`);
   } finally {
-    playing = false;
-    $("#play").disabled = false;
-    poll();
+    if (mine === clientRun) {
+      playing = false;
+      poll();
+    }
   }
 }
 
@@ -263,7 +267,6 @@ $("#theme").addEventListener("click", () => {
 });
 
 buildPanes();
-refresh().then(() => {
-  poll();
-  if (new URLSearchParams(location.search).has("autoplay")) play();
-});
+// From the landing page the link carries ?autoplay: start a clean run before drawing the old one.
+if (new URLSearchParams(location.search).has("autoplay")) play();
+else refresh().then(poll);

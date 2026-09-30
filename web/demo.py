@@ -351,9 +351,10 @@ class Duet:
         return DUET_MEMORY.get(member, "")
 
     def start(self) -> str:
+        """Every start is a clean run. A new start replaces one in progress; its late answers are dropped."""
         with self.lock:
-            if self.run and time.time() - self.run_at < 45:
-                raise PermissionError("a run is already playing; watch that one")
+            if self.run and time.time() - self.run_at < 3:
+                raise PermissionError("a run just started; give it a moment")
             self.seed(self.dir, history=False, permission=True)
             self.bots.reset()
             self.run = secrets.token_urlsafe(12)

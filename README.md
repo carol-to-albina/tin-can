@@ -51,7 +51,7 @@ On Cloudflare:
 cd cloudflare
 npx wrangler secret put OPENROUTER_API_KEY
 npx wrangler secret put HOST_TOKEN
-npx wrangler deploy
+./deploy.sh              # checks the landing film is v2, then runs wrangler deploy
 ```
 
 Guest credit, the total budget, the model and the provider route are vars in `cloudflare/wrangler.toml`. Each guest gets $0.30 of model work by default. The person who asks for the work pays for it.
