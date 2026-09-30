@@ -8,7 +8,7 @@ from pathlib import Path
 from unittest import mock
 
 from tincan import git
-from tincan.types import ProtocolError
+from tincan.types import ConflictError, ProtocolError
 
 
 class GitCase(unittest.TestCase):
@@ -86,6 +86,57 @@ class RequireTests(GitCase):
         self.git(work, "checkout", "--detach")
         with self.assertRaises(ProtocolError):
             git.require_branch(work, "master")
+
+
+class PullTests(GitCase):
+    def test_pull_is_quiet_when_the_remote_has_no_commits(self) -> None:
+        self.assertIsNone(git.pull(self.clone("work")))
+
+    def test_pull_is_quiet_when_the_branch_has_no_upstream_and_no_remote_branch(
+        self,
+    ) -> None:
+        work = self.root / "fresh"
+        work.mkdir()
+        self.git(work, "init", "-b", "master")
+        self.git(work, "remote", "add", "origin", str(self.remote))
+        self.assertIsNone(git.pull(work))
+
+    def test_pull_fast_forwards_after_another_clone_pushed(self) -> None:
+        work = self.seeded()
+        other = self.clone("other")
+        self.write(other, "out/albina.ndjson", '{"seq":1}\n')
+        self.git(other, "add", "--", ".tincan/out/albina.ndjson")
+        self.git(other, "commit", "-m", "albina 1")
+        self.git(other, "push")
+        git.pull(work)
+        self.assertTrue((work / ".tincan" / "out" / "albina.ndjson").exists())
+
+    def test_pull_raises_conflict_on_a_divergent_local_commit(self) -> None:
+        work = self.seeded()
+        other = self.clone("other")
+        self.write(other, "out/albina.ndjson", '{"seq":1}\n')
+        self.git(other, "add", "--", ".tincan/out/albina.ndjson")
+        self.git(other, "commit", "-m", "albina 1")
+        self.git(other, "push")
+        self.write(work, "out/carol.ndjson", '{"seq":1}\n')
+        self.git(work, "add", "--", ".tincan/out/carol.ndjson")
+        self.git(work, "commit", "-m", "carol 1")
+        with self.assertRaises(ConflictError):
+            git.pull(work)
+
+    def test_pull_raises_conflict_when_the_remote_branch_has_no_upstream(self) -> None:
+        self.seeded()
+        fork = self.root / "fork"
+        fork.mkdir()
+        self.git(fork, "init", "-b", "master")
+        self.git(fork, "remote", "add", "origin", str(self.remote))
+        self.git(fork, "config", "user.name", "Carol Calin")
+        self.git(fork, "config", "user.email", "carol@think2earn.local")
+        self.write(fork, "out/carol.ndjson", '{"seq":1}\n')
+        self.git(fork, "add", "--", ".tincan/out/carol.ndjson")
+        self.git(fork, "commit", "-m", "carol 1")
+        with self.assertRaises(ConflictError):
+            git.pull(fork)
 
 
 if __name__ == "__main__":
