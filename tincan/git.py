@@ -15,6 +15,10 @@ class GitAuthor:
     email: str
 
 
+UNCOMMITTED = GitAuthor("", "")
+"""author_of_line result for a line that no commit introduced yet."""
+
+
 class GitMissing(ProtocolError):
     """The git binary is not on PATH."""
 
@@ -60,6 +64,35 @@ def _pathspec(root: Path, path: Path) -> str:
 
 def _tracked(root: Path, spec: str) -> bool:
     return _run(root, "ls-files", "--error-unmatch", "--", spec).returncode == 0
+
+
+def _line_of_seq(path: Path, seq: Seq) -> int:
+    """The 1-based file line holding that seq. Blank lines do not consume seq."""
+    try:
+        text = path.read_text()
+    except OSError:
+        return 0
+    seen = 0
+    for number, raw in enumerate(text.splitlines(), start=1):
+        if not raw.strip():
+            continue
+        seen += 1
+        if seen == int(seq):
+            return number
+    return 0
+
+
+def _porcelain_author(text: str) -> GitAuthor:
+    if set(text.split(" ", 1)[0]) == {"0"}:
+        return UNCOMMITTED
+    name = ""
+    email = ""
+    for raw in text.splitlines():
+        if raw.startswith("author ") and not name:
+            name = raw[len("author ") :].strip()
+        elif raw.startswith("author-mail ") and not email:
+            email = raw[len("author-mail ") :].strip().strip("<>")
+    return GitAuthor(name, email)
 
 
 def _remote(root: Path) -> str:
@@ -159,8 +192,16 @@ def push(root: Path) -> None:
 
 
 def author_of_line(root: Path, path: Path, seq: Seq) -> GitAuthor:
-    """Blame the line that carries seq."""
-    raise NotImplementedError
+    """Blame the line that carries seq. UNCOMMITTED when no commit holds it yet."""
+    require_repo(root)
+    spec = _pathspec(root, path)
+    line = _line_of_seq(root / spec, seq)
+    if not line:
+        raise ProtocolError(f"{spec} has no line for seq {int(seq)}")
+    run = _run(root, "blame", "--line-porcelain", "-L", f"{line},{line}", "--", spec)
+    if run.returncode != 0:
+        return UNCOMMITTED
+    return _porcelain_author(run.stdout)
 
 
 def remote_url(root: Path) -> str:
