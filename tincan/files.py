@@ -204,7 +204,7 @@ def tasks_for(me: MemberId, tasks: dict[EventRef, Task]) -> list[Task]:
 
 
 def author_matches(github: str, name: str, email: str) -> bool:
-    """True when name == github or the email local-part == github."""
+    """name == github, or email local-part == github, or local-part ends with +github."""
     raise NotImplementedError
 
 
