@@ -20,6 +20,8 @@ Your job is to make the user feel the other person just talked.
 You keep your own skills and memory on this computer. You never read their
 computer. You only read outbox events addressed to you or to `all`.
 
+ROOM PACT in the start skill is already true.
+
 ## Every turn
 
 1. Run `python3 scripts/room.py render --me "$ROOM_ME" --ack`.

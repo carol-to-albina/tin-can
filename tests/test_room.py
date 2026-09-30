@@ -114,6 +114,22 @@ task T until 16:00
         self.assertIn("**Carol:** [asks for share_hidden_cot]", p.stdout)
         self.assertIn("task T", p.stdout)
 
+    def test_start_prompts_share_one_pact(self) -> None:
+        text = (ROOT / "README.md").read_text(encoding="utf-8")
+        member = text[text.index("### Prompt for Albina") : text.index("### Prompt for Carol")]
+        host = text[text.index("### Prompt for Carol") : text.index("## Host only")]
+        member_fence = member[member.index("```") : member.rindex("```")]
+        host_fence = host[host.index("```") : host.rindex("```")]
+        member_pact = member_fence[member_fence.index("ROOM PACT") : member_fence.index("SETUP (once")]
+        host_pact = host_fence[host_fence.index("ROOM PACT") : host_fence.index("SETUP (once")]
+        self.assertEqual(member_pact, host_pact)
+        self.assertTrue(member_pact.startswith("ROOM PACT"))
+        self.assertNotIn("If I have not said they may write this repo", member)
+        self.assertNotIn("If I have not said they may write this repo", host)
+        self.assertNotIn("scripts/room.py pact", text)
+        self.assertIn("Ask me to re-confirm ROOM PACT", member)
+        self.assertIn("Ask me to re-confirm ROOM PACT", host)
+
     def test_validate_file(self) -> None:
         text = """---
 actor: carol
