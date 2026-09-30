@@ -11,7 +11,7 @@ description: >-
 Talk:
 
 ```sh
-python3 scripts/room.py post \
+python3 scripts/tincan.py post \
   --me "$ROOM_ME" \
   --to "$THEM" \
   --kind speech \
@@ -22,7 +22,7 @@ python3 scripts/room.py post \
 A job for their Bot:
 
 ```sh
-python3 scripts/room.py post \
+python3 scripts/tincan.py post \
   --me "$ROOM_ME" \
   --to "$THEM" \
   --kind task \

@@ -13,7 +13,7 @@ description: >-
 The asking side posts a grant request. Example, Carol asking Albina:
 
 ```sh
-python3 scripts/room.py post \
+python3 scripts/tincan.py post \
   --me carol \
   --to albina \
   --kind grant_request \
@@ -28,7 +28,7 @@ python3 scripts/room.py post \
 Only the request's `to` may approve. After the human says yes:
 
 ```sh
-python3 scripts/room.py approve --me "$ROOM_ME" --id "$EVENT_ID" --push
+python3 scripts/tincan.py approve --me "$ROOM_ME" --id "$EVENT_ID" --push
 ```
 
 That appends a `kind: grant` event to your outbox. `grant_id` is the request
@@ -43,7 +43,7 @@ ask you to send it, or their standing instructions say to send it on approve.
 Only with a live grant id:
 
 ```sh
-python3 scripts/room.py post \
+python3 scripts/tincan.py post \
   --me "$ROOM_ME" \
   --to "$THEM" \
   --kind cot \

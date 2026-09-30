@@ -435,10 +435,41 @@ def webhook_suffix(member_id: str) -> str:
     return member_id.upper().replace("-", "_")
 
 
-def notify_webhook(rid: str, ids: list[str]) -> None:
+def hook_path(actor: str) -> Path:
+    return room_dir() / "hook" / f"{actor}.json"
+
+
+def load_hook_file(rid: str) -> tuple[str, str] | None:
+    path = hook_path(rid)
+    if not path.exists():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(data, dict):
+        return None
+    url = str(data.get("url") or "").strip()
+    key = str(data.get("key") or "").strip()
+    if url and key:
+        return url, key
+    return None
+
+
+def load_hook_env(rid: str) -> tuple[str, str]:
     suffix = webhook_suffix(rid)
-    url = os.environ.get(f"GROK_WEBHOOK_URL_{suffix}") or ""
-    key = os.environ.get(f"GROK_WEBHOOK_KEY_{suffix}") or ""
+    return (
+        (os.environ.get(f"GROK_WEBHOOK_URL_{suffix}") or "").strip(),
+        (os.environ.get(f"GROK_WEBHOOK_KEY_{suffix}") or "").strip(),
+    )
+
+
+def load_hook_creds(rid: str) -> tuple[str, str]:
+    return load_hook_file(rid) or load_hook_env(rid)
+
+
+def notify_webhook(rid: str, ids: list[str]) -> None:
+    url, key = load_hook_creds(rid)
     if not url or not key:
         return
     body = json.dumps({"recipient": rid, "events": ids}).encode("utf-8")
@@ -458,7 +489,7 @@ def notify_webhook(rid: str, ids: list[str]) -> None:
         print(f"webhook {rid} failed: {e}", file=sys.stderr)
 
 
-def git_push_outbox(path: Path, message: str) -> None:
+def git_push_owned(path: Path, message: str) -> None:
     root = room_root()
     try:
         probe = subprocess.run(
@@ -563,7 +594,7 @@ def cmd_post(args: argparse.Namespace) -> None:
         die(f"{kind} needs grant_id")
     path = append_outbox(me, ev)
     if args.push:
-        git_push_outbox(path, f"room: {me} {kind}")
+        git_push_owned(path, f"room: {me} {kind}")
     print(json.dumps(ev, indent=2))
 
 
@@ -619,8 +650,22 @@ def cmd_approve(args: argparse.Namespace) -> None:
     )
     path = append_outbox(me, ev)
     if args.push:
-        git_push_outbox(path, f"room: {me} grant")
+        git_push_owned(path, f"room: {me} grant")
     print(json.dumps(ev, indent=2))
+
+
+def cmd_hook_set(args: argparse.Namespace) -> None:
+    _cfg, me = require_me(args)
+    url = (args.url or "").strip()
+    key = (args.key or "").strip()
+    if not url or not key:
+        die("hook-set needs --url and --key")
+    path = hook_path(me)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"url": url, "key": key}, indent=2) + "\n", encoding="utf-8")
+    if args.push:
+        git_push_owned(path, f"room: {me} hook")
+    print(json.dumps({"me": me, "url": url, "path": str(path)}))
 
 
 def cmd_hook_notify(args: argparse.Namespace) -> None:
@@ -670,7 +715,7 @@ def cmd_seed_labels(args: argparse.Namespace) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(description="Albina–Carol room over owned ndjson outboxes")
+    p = argparse.ArgumentParser(description="TinCan over owned ndjson outboxes")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     v = sub.add_parser("validate", help="validate a room event file")
@@ -727,6 +772,13 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--repo", default="")
     ap.add_argument("--push", action="store_true")
     ap.set_defaults(fn=cmd_approve)
+
+    hs = sub.add_parser("hook-set", help="write this member's doorbell url+key into .room/hook/<me>.json")
+    hs.add_argument("--me")
+    hs.add_argument("--url", default="")
+    hs.add_argument("--key", default="")
+    hs.add_argument("--push", action="store_true")
+    hs.set_defaults(fn=cmd_hook_set)
 
     hk = sub.add_parser("hook-notify", help="Actions: list push recipients and POST webhooks")
     hk.set_defaults(fn=cmd_hook_notify)

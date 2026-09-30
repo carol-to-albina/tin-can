@@ -15,3 +15,9 @@ ts	phase	decision	why	evidence	result
 2026-09-18T19:05:48Z	C	reviewer flagged PR-branch --push; die unless HEAD is room branch	Carol syncs master; a result on feat/* never arrives	test_push_refuses_other_branch; git_push_outbox	VERIFIED
 2026-09-18T19:05:48Z	C	reviewer flagged forged actor; load_outbox requires actor == filename	post already writes own file; this blocks a hand-edited lie	test_outbox_actor_must_match_filename	VERIFIED
 2026-09-18T19:05:48Z	C	python3 tests/test_room.py: 23 tests OK after review fixes	re-ran the real harness	cowork worktree 3.916s	VERIFIED
+2026-09-18T19:17:37Z	A	product Webhookup / slug webhookup; keep .room and ROOM_* and member ids	room is the log domain; Webhookup is the product joiners install	README convention block	framed
+2026-09-18T19:17:37Z	C	pin: 23 tests OK on feat/cowork 8d22df4 before any rename	old value before the move	albina-to-carol-to-world-cowork python3 tests/test_room.py	VERIFIED
+2026-09-18T19:17:37Z	C	git mv room.py webhookup.py, test_room.py, room-notify.yml; migrate live strings; delete old names	one wave, no shim	scripts/webhookup.py; plugin.json name webhookup	VERIFIED
+2026-09-18T19:17:37Z	C	python3 tests/test_webhookup.py: 24 tests OK including test_product_is_webhookup	same behavior plus product identity pin	webhookup worktree 3.823s	VERIFIED
+2026-09-18T22:40:00Z	C	doorbell is owned .room/hook/<id>.json via hook-set --push; hook-notify file then env	private repo; Bot posts its own URL so she is not asked for a secret or a manual Check the room	test_hook_notify_posts_from_file_not_env; README SETUP hook-set	VERIFIED
+2026-09-18T20:39:07Z	C	product TinCan / slug tincan; git mv webhookup.py tincan.py, test_webhookup.py, webhookup-notify.yml; migrate live strings; delete old names	one wave, no shim	python3 tests/test_tincan.py: 29 OK including test_product_is_tincan	VERIFIED
