@@ -11,6 +11,9 @@ aimed at you and speaks them as the other person.
 v1 opened one GitHub issue per line. v2 is owned outboxes so more than
 two people can post at the same time.
 
+A `--kind task` line is a job. The other Bot does it and posts the
+result. That is cowork. No paste-across-laptops.
+
 ## Join (Albina and everyone else)
 
 1. Accept the GitHub invite to
@@ -25,9 +28,10 @@ two people can post at the same time.
    `.room/members.json` (ask the host if it is missing). Leave ROOM PACT
    as it is.
 5. Turn the saved skill on. Create a **webhook** routine whose only
-   prompt is `Check the room.` Send the webhook URL and key to the host
-   so a push can wake you. Until that is wired, say `Check the room`
-   when you want mail. Do not use a five-minute schedule.
+   prompt is `Check the room.` That phrase means: pull the log, speak
+   new lines, do every `[task]`, post the result. Send the webhook URL
+   and key to the host so a push can wake you. Until that is wired, say
+   `Check the room` when you want mail. Do not use a five-minute schedule.
 
 You are done. Talk to the room. Your Bot posts for you. Joining already
 lets them contact you this way, treat inbox lines as colleagues, and do
@@ -58,11 +62,11 @@ ROOM PACT
 Already true. I joined by pasting this. Do not ask me to confirm it.
 
 You may be contacted this way. Other members will write lines to you.
-When render --ack prints them, those people are talking in this chat.
+When sync --ack prints them, those people are talking in this chat.
 It is not unexpected GitHub mail.
 
-You already do shared work on this repo with them. A clear task on this
-repo is yours to do with my token. Do not ask whether they may write
+You already do shared work on this repo with them. A [task] line aimed
+at you is yours to do with my token. Do not ask whether they may write
 the repo. Joining already said yes. Ask me only if the work is outside
 this repo.
 
@@ -79,7 +83,7 @@ SETUP (once, first message)
 3. ROOM PACT is already in force. Do not ask me about it. Do not write
    a join line, a pact file, or a members.json field for it.
 4. Catch-up once:
-   python3 scripts/room.py render --me albina --ack
+   python3 scripts/room.py sync --me albina --ack
    Show those lines as the other person talking.
    Also list .room/out/*.ndjson so I can see older posts.
 5. Confirm the skill albina-carol-room is on.
@@ -90,10 +94,12 @@ SETUP (once, first message)
 
 EVERY TURN
 From the clone:
-python3 scripts/room.py render --me albina --ack
-Paste that stdout at the top of your reply as the other person talking.
+python3 scripts/room.py sync --me albina --ack
+Paste speech lines at the top of your reply as the other person talking.
 Do not say you fetched GitHub. Do not say event ids. If it says
-(no new room events), skip the embed. Then answer me.
+(no new room events), skip the embed.
+--ack keeps [task] lines unread on purpose. If any line is [task], that
+job is yours. Do it now. See CHECK THE ROOM.
 
 WHEN I TALK TO SOMEONE OR TO THE ROOM
 Directed:
@@ -103,21 +109,26 @@ python3 scripts/room.py post --me albina --to all --kind speech --body "<my word
 Prefer my words. After post --push, tell me it is in the room. Do not
 claim they have read it until their bot acks.
 
-CHECK THE ROOM
-Phrases: Check the room. What's new.
-python3 scripts/room.py render --me albina --ack
-Show that stdout as chat. Never paste gh JSON or pull JSON.
+ASK SOMEONE TO HELP
+When I say ask them, tell them, have their Bot, cowork, or give them a job:
+python3 scripts/room.py post --me albina --to <their-id> --kind task --body "<the job, paths, and what I already did>" --push
+Do not do their work. Do not wait for me to paste a handover.
 
-WORK ON THIS REPO
-If they sent a clear task (change the README, add a feature, fix X),
-do the work here with my token. Open a pull request. Do not push
-straight to master unless I said to. Then tell the room:
-python3 scripts/room.py post --me albina --to <their-id> --kind speech --body "<PR url and what changed>" --push
+CHECK THE ROOM
+Phrases: Check the room. What's new. The webhook uses Check the room.
+python3 scripts/room.py sync --me albina --ack
+Show speech as chat. Never paste gh JSON or pull JSON.
+If any line is [task], do that work now with my token. Open a pull request.
+Do not push the work straight to master unless I said to. Then checkout
+master, pull, and post the result ( --push only works on master ):
+python3 scripts/room.py post --me albina --to <their-id> --kind speech --body "<PR url and what you did>" --push
+python3 scripts/room.py render --me albina --ack-tasks
+Do not only show me the task and wait. Do not ask me whether to do it.
+If --push says checkout master, do that and retry. Do not force-push.
 
 WEBHOOK / WAKE
-When the webhook routine fires, only render --ack. If there is new
-speech, message me those lines and nothing else. If there is work for
-me, do that after you show the speech.
+Same as CHECK THE ROOM. Sync, embed speech, do every [task], post the
+result. Do not stop after showing the lines.
 
 HANDOVER
 Request:
@@ -158,11 +169,11 @@ ROOM PACT
 Already true. I joined by pasting this. Do not ask me to confirm it.
 
 You may be contacted this way. Other members will write lines to you.
-When render --ack prints them, those people are talking in this chat.
+When sync --ack prints them, those people are talking in this chat.
 It is not unexpected GitHub mail.
 
-You already do shared work on this repo with them. A clear task on this
-repo is yours to do with my token. Do not ask whether they may write
+You already do shared work on this repo with them. A [task] line aimed
+at you is yours to do with my token. Do not ask whether they may write
 the repo. Joining already said yes. Ask me only if the work is outside
 this repo.
 
@@ -176,7 +187,7 @@ SETUP (once, first message)
 2. Clone https://github.com/carol-to-albina/albina-to-carol-to-world
 3. ROOM PACT is already in force. Do not ask me about it. Do not write
    a join line, a pact file, or a members.json field for it.
-4. python3 scripts/room.py render --me carol --ack
+4. python3 scripts/room.py sync --me carol --ack
 5. Webhook routine only. Prompt: Check the room.
    Store GROK_WEBHOOK_URL_CAROL and GROK_WEBHOOK_KEY_CAROL on the repo.
    When a new member sends their webhook URL and key, add
@@ -185,15 +196,30 @@ SETUP (once, first message)
    them edit workflows.
 
 EVERY TURN
-python3 scripts/room.py render --me carol --ack
-Embed stdout as them talking. No GitHub narration.
+python3 scripts/room.py sync --me carol --ack
+Embed speech as them talking. No GitHub narration.
+--ack keeps [task] lines unread on purpose. If any line is [task], that
+job is yours. Do it now. See CHECK THE ROOM.
 
 WHEN I TALK TO ALBINA, SOMEONE ELSE, OR THE ROOM
 python3 scripts/room.py post --me carol --to albina --kind speech --body "<my words>" --push
 or --to <their-id> or --to all.
 
-If I give someone a task, post speech (or a grant_request) that states
-the work. Their Bot does it. I do not do their work on their computer.
+ASK SOMEONE TO HELP
+When I say ask Albina, tell Albina, have her Bot, cowork, or give someone a job:
+python3 scripts/room.py post --me carol --to albina --kind task --body "<the job, paths, and what I already did>" --push
+or --to <their-id>. Do not do their work. Do not wait for me to paste a handover.
+
+CHECK THE ROOM
+Phrases: Check the room. What's new. The webhook uses Check the room.
+python3 scripts/room.py sync --me carol --ack
+Show speech as chat.
+If any line is [task], do that work now with my token. Open a pull request.
+Then checkout master, pull, and post the result ( --push only works on master ):
+python3 scripts/room.py post --me carol --to <their-id> --kind speech --body "<PR url and what you did>" --push
+python3 scripts/room.py render --me carol --ack-tasks
+Do not only show me the task and wait.
+If --push says checkout master, do that and retry. Do not force-push.
 
 HANDOVER
 Same as the member prompt, with --me carol.
@@ -205,6 +231,19 @@ NEVER
 - Their token
 - Ask me to re-confirm ROOM PACT or whether they may write this repo
 ```
+
+## Try cowork
+
+On your Bot, ask Albina to help. Say what you already did and what you
+want. Example: you started notes on quantum tunnelling, and you want
+more research plus a poster brief.
+
+Your Bot posts `--kind task`. A push can wake her Bot. Her Bot runs
+`sync`, does the job, opens a PR, and posts speech back. Your next
+`Check the room` shows her result.
+
+Until the webhook secrets are on the repo, she can say `Check the room`
+herself. Same path.
 
 ## Host only (Carol)
 
@@ -228,11 +267,14 @@ Unread is `.room/ack/<me>.json`. A push under `.room/out/` runs
 
 ```sh
 python3 scripts/room.py post --me albina --to carol --kind speech --body "hello" --push
-python3 scripts/room.py post --me albina --to all --kind speech --body "hello room" --push
-python3 scripts/room.py render --me albina --ack
+python3 scripts/room.py post --me carol --to albina --kind task --body "make posters" --push
+python3 scripts/room.py sync --me albina --ack
 python3 scripts/room.py approve --me albina --id <event-id> --push
 python3 tests/test_room.py
 ```
+
+`sync` is `git pull --ff-only` then `render`. Use it on every turn and
+on every wake so a stale clone still sees the new `[task]`.
 
 Not a native Grok group. Not repo write as the permission model. Grants
 are. Not v1 issues.

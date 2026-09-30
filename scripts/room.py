@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-KINDS = ("speech", "grant_request", "grant", "cot", "receipt")
+KINDS = ("speech", "grant_request", "grant", "cot", "receipt", "task")
 GRANT_STATUSES = ("requested", "live", "denied", "expired", "revoked")
 KIND_ALIASES = {
     "grant-request": "grant_request",
@@ -202,7 +202,16 @@ def render_line(cfg: dict[str, Any], ev: dict[str, Any]) -> str:
         return f"**{who}:** [hidden CoT under grant {ev['grant_id']}]\n{ev['body']}"
     if kind == "receipt":
         return f"**{who}:** [receipt grant {ev['grant_id']}] {ev['body']}"
+    if kind == "task":
+        return f"**{who}:** [task] {ev['body']}"
     return f"**{who}:** {ev['body']}"
+
+
+def room_branch(cfg: dict[str, Any] | None = None) -> str:
+    data = cfg
+    if data is None and members_path().exists():
+        data = load_members()
+    return str(os.environ.get("ROOM_BRANCH") or (data or {}).get("branch") or "master")
 
 
 def repo_from_env(cfg: dict[str, Any], explicit: str) -> str:
@@ -251,9 +260,12 @@ def load_outbox(actor: str) -> list[dict[str, Any]]:
         if not line.strip():
             continue
         try:
-            events.append(json.loads(line))
+            ev = json.loads(line)
         except json.JSONDecodeError:
             die(f"bad ndjson in {path}: line {i}")
+        if ev.get("actor") != actor:
+            die(f"outbox {path} line {i} actor {ev.get('actor')!r} != {actor}")
+        events.append(ev)
     return events
 
 
@@ -459,6 +471,15 @@ def git_push_outbox(path: Path, message: str) -> None:
         die("git is not installed")
     if probe.returncode != 0 or probe.stdout.strip() != "true":
         die("no git repository; cannot --push")
+    cur = subprocess.run(
+        ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+        cwd=root,
+        capture_output=True,
+        text=True,
+    )
+    branch = room_branch()
+    if cur.returncode != 0 or cur.stdout.strip() != branch:
+        die(f"on {cur.stdout.strip() or 'unknown'}; checkout {branch} before --push so the other Bot can sync")
     rel = os.path.relpath(path, root)
     cmds = (
         ["git", "add", "--", rel],
@@ -472,6 +493,32 @@ def git_push_outbox(path: Path, message: str) -> None:
             die("git is not installed")
         if r.returncode != 0:
             die(r.stderr.strip() or r.stdout.strip() or "git failed")
+
+
+def git_pull() -> None:
+    root = room_root()
+    try:
+        probe = subprocess.run(
+            ["git", "rev-parse", "--is-inside-work-tree"],
+            cwd=root,
+            capture_output=True,
+            text=True,
+        )
+    except FileNotFoundError:
+        die("git is not installed")
+    if probe.returncode != 0 or probe.stdout.strip() != "true":
+        die("no git repository; cannot sync")
+    try:
+        r = subprocess.run(
+            ["git", "pull", "--ff-only"],
+            cwd=root,
+            capture_output=True,
+            text=True,
+        )
+    except FileNotFoundError:
+        die("git is not installed")
+    if r.returncode != 0:
+        die(r.stderr.strip() or r.stdout.strip() or "git pull failed")
 
 
 def cmd_validate(args: argparse.Namespace) -> None:
@@ -532,8 +579,15 @@ def cmd_render_unread(args: argparse.Namespace) -> None:
         print("(no new room events)")
         return
     print("\n\n".join(render_line(cfg, ev) for ev in rows))
-    if args.ack:
+    if getattr(args, "ack_tasks", False):
         advance_ack(me, rows)
+    elif args.ack:
+        advance_ack(me, [ev for ev in rows if ev.get("kind") != "task"])
+
+
+def cmd_sync(args: argparse.Namespace) -> None:
+    git_pull()
+    cmd_render_unread(args)
 
 
 def cmd_ack(args: argparse.Namespace) -> None:
@@ -649,7 +703,15 @@ def build_parser() -> argparse.ArgumentParser:
     rend.add_argument("--me")
     rend.add_argument("--repo", default="")
     rend.add_argument("--ack", action="store_true")
+    rend.add_argument("--ack-tasks", action="store_true")
     rend.set_defaults(fn=cmd_render_unread)
+
+    syn = sub.add_parser("sync", help="git pull --ff-only, then print unread events as chat")
+    syn.add_argument("--me")
+    syn.add_argument("--repo", default="")
+    syn.add_argument("--ack", action="store_true")
+    syn.add_argument("--ack-tasks", action="store_true")
+    syn.set_defaults(fn=cmd_sync)
 
     ack = sub.add_parser("ack", help="advance your cursor past an event id")
     ack.add_argument("--me")

@@ -1,0 +1,17 @@
+ts	phase	decision	why	evidence	result
+2026-09-18T18:50:00Z	A	done = kind task renders as [task]; sync git-pulls then renders; both paste prompts post/do task and wake does the work; tests green; live Grok Bot OPEN	prove it on the real commands; live webhook is the user's test	Phase A frame	framed
+2026-09-18T18:50:00Z	A	scope: ~6 files on feat/room-pact; skip second arena; skip live Bot in this run	arena already settled the event shape	/tmp/arena-room-pact C1+C2	scoped
+2026-09-18T18:50:00Z	B	units: failing tests, kind task, cmd_sync, fetch-depth + drop issue triggers, cowork prompts, trail + PR	stale clone and announce-only wake are the riskiest gaps	figure-it-out Phase B	designed
+2026-09-18T18:50:00Z	B	no kind task_done; the reply is kind speech with the PR url	speech already relays back; receipt stays grant-only	scripts/room.py render_line	chose
+2026-09-18T19:00:44Z	C	baseline: 7 tests failed on pre-change feat/room-pact	old value vs new value before editing room.py	tests/test_room.py on 5784ab1: unknown kind task; no sync; no fetch-depth: 0	NOT VERIFIED pre-change as intended
+2026-09-18T19:00:44Z	C	add kind task; render as **Who:** [task] body	jobs need a kind speech cannot mark	scripts/room.py KINDS + render_line; test_render_task_as_them	VERIFIED
+2026-09-18T19:00:44Z	C	add sync = git pull --ff-only then render	stale clone was the cowork miss; render does not pull	test_sync_pulls_then_renders_task: stale render empty, sync shows [task]	VERIFIED
+2026-09-18T19:00:44Z	C	checkout fetch-depth 0; drop issue and PR triggers	shallow checkout made hook-notify treat the whole outbox as new; issue triggers were v1 leftovers	.github/workflows/room-notify.yml; test_workflow_push_only_with_history	VERIFIED
+2026-09-18T19:00:44Z	C	rewrite paste prompts and skills so Check the room syncs and does [task]	old wake only rendered and could skip the job	README.md fences; test_start_prompts_share_one_pact	VERIFIED
+2026-09-18T19:00:44Z	C	no kind task_done; reply is kind speech with the PR url	receipt stays grant-only; speech already relays	README CHECK THE ROOM post --kind speech	chose
+2026-09-18T19:00:44Z	C	python3 tests/test_room.py: 20 tests OK	predicate on the real commands, not a self-report	cowork worktree test run 2.934s	VERIFIED
+2026-09-18T19:00:44Z	E	live Grok Bot loop left open	cannot fire her webhook or her cloud computer from this repo	user live test after merge + webhook secrets	INCONCLUSIVE
+2026-09-18T19:05:48Z	C	reviewer flagged ack-before-work; --ack now skips task until --ack-tasks	a crash after sync --ack would drop the job	test_post_task_then_ack; test_ack_skips_task_but_clears_speech	VERIFIED
+2026-09-18T19:05:48Z	C	reviewer flagged PR-branch --push; die unless HEAD is room branch	Carol syncs master; a result on feat/* never arrives	test_push_refuses_other_branch; git_push_outbox	VERIFIED
+2026-09-18T19:05:48Z	C	reviewer flagged forged actor; load_outbox requires actor == filename	post already writes own file; this blocks a hand-edited lie	test_outbox_actor_must_match_filename	VERIFIED
+2026-09-18T19:05:48Z	C	python3 tests/test_room.py: 23 tests OK after review fixes	re-ran the real harness	cowork worktree 3.916s	VERIFIED
