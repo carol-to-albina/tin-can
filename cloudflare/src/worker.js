@@ -90,8 +90,18 @@ const TOOLS = [
   },
 ];
 
-const STYLE =
-  "Write like a person texting: short sentences, plain words. No em dashes. No hype words (crucial, seamless, robust, pivotal, game-changer). No 'Great question', no 'I hope this helps', no offer at the end unless you need a yes.";
+// Condensed from blader/humanizer (SKILL.md v3.1.0), so answers read like a person wrote them.
+const STYLE = `Writing rules (from the humanizer guide):
+- State the point directly. No "not X but Y" or "it's not just X, it's Y" contrasts. No one-line closer that repeats the point. No staged openers like "Here's the thing" or "Let's dive in".
+- No em dashes or en dashes. Use commas, periods, colons or parentheses.
+- No lists of three just for rhythm. No bold labels. No emojis.
+- No stock AI words: crucial, seamless, robust, pivotal, delve, vibrant, showcase, testament, landscape, underscore, game-changer, leverage.
+- No "Great question", "I hope this helps", "Let me know", "Feel free to".
+- Prefer plain verbs (is, are, has). Mix short and long sentences. Keep every fact you were given and add none.
+Length: answers under 90 words, or at most 6 short bullet lines ("- ") when listing things. Handover pages follow the same rules, with short sentence-case headings.`;
+
+// A model may still slip in a dash; swap it for a comma so the text follows the rules.
+const tidy = (text) => String(text || "").replace(/\s*\u2014\s*/g, ", ").replace(/\s+\u2013\s+/g, ", ");
 
 function systemPrompt({ name, roster, autonomy, permission, memory }) {
   return `You are ${name}'s Grok. You speak only with ${name}, in ${name}'s own chat.
@@ -113,12 +123,18 @@ How to act, always through tool calls:
 ${STYLE}`;
 }
 
+// "for": first names that get this question picked for them when they join.
 const ASKS = [
-  { id: "handover", label: "HTML handover: why TinCan should win", job: "Send me a one-page HTML handover on why TinCan should win the SpaceX xAI hackathon." },
-  { id: "security", label: "Your security gaps", job: "What are TinCan's security gaps? Be specific and honest." },
-  { id: "shortcuts", label: "Ctrl+K shortcuts here", job: "What are the Ctrl+K command shortcuts in this app?" },
-  { id: "pitch", label: "What's the pitch?", job: "What's the pitch? Give it to me in 30 seconds." },
+  { id: "handover", label: "HTML handover: why TinCan should win", job: "Send me a one-page HTML handover on why TinCan should win the SpaceX xAI hackathon.", for: [] },
+  { id: "hosting", label: "How is the room hosted?", job: "How is this room hosted? What runs where, and what would change in the real product?", for: ["daniel"] },
+  { id: "security", label: "Your security gaps", job: "What are TinCan's security gaps? Be specific and honest.", for: ["petr"] },
+  { id: "shortcuts", label: "Ctrl+K shortcuts here", job: "What are the Ctrl+K command shortcuts in this app?", for: ["ben"] },
+  { id: "pitch", label: "What's the pitch?", job: "What's the pitch? Give it to me in 30 seconds.", for: ["kate"] },
 ];
+const pickFor = (display) => {
+  const first = String(display || "").trim().split(/\s+/)[0].toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  return ASKS.find((a) => a.for.includes(first))?.id || "";
+};
 const JOBS = [
   { id: "review", label: "Security review page", job: "Write a one-page HTML security review of TinCan from what you have seen in this room: one thing that worries you and one fix." },
   { id: "score", label: "Score the pitch", job: "Score TinCan's pitch from 1 to 10 and say in two sentences what would raise the score." },
@@ -178,11 +194,77 @@ function cleanName(raw) {
   return String(raw || "").replace(/[^\p{L}\p{N} .'_-]/gu, "").replace(/\s+/g, " ").trim().slice(0, 24);
 }
 
+// Read OpenRouter's server-sent events: text, tool calls and usage, updating `live` as they arrive
+// so the page can show the answer while the model is still writing it.
+async function readStream(res, live) {
+  const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+  const out = { id: "", model: "", provider: "", usage: {}, content: "", calls: [], first: 0 };
+  let buf = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += value;
+    let cut;
+    while ((cut = buf.indexOf("\n")) >= 0) {
+      const line = buf.slice(0, cut).trim();
+      buf = buf.slice(cut + 1);
+      if (!line.startsWith("data:")) continue; // OpenRouter also sends ": keep-alive" comments
+      const raw = line.slice(5).trim();
+      if (!raw || raw === "[DONE]") continue;
+      let chunk;
+      try {
+        chunk = JSON.parse(raw);
+      } catch {
+        continue;
+      }
+      if (chunk.error) throw new Error(chunk.error.message || "model error");
+      out.id ||= chunk.id || "";
+      out.model = chunk.model || out.model;
+      out.provider = chunk.provider || out.provider;
+      if (chunk.usage) out.usage = chunk.usage;
+      const delta = chunk.choices?.[0]?.delta || {};
+      if (delta.content) out.content += delta.content;
+      for (const tc of delta.tool_calls || []) {
+        const call = (out.calls[tc.index ?? 0] ||= { name: "", args: "" });
+        if (tc.function?.name && !call.name) call.name = tc.function.name;
+        if (tc.function?.arguments) call.args += tc.function.arguments;
+      }
+      if ((delta.content || delta.tool_calls) && !out.first) out.first = Date.now();
+      if (live && out.first) {
+        live.first = out.first;
+        const finish = out.calls.find((c) => c.name === "finish_task");
+        const reply = out.calls.find((c) => c.name === "reply");
+        live.partial = tidy(finish ? partialField(finish.args, "summary") : reply ? partialField(reply.args, "text") : out.content).slice(-1500);
+        live.bytes = finish ? partialField(finish.args, "html").length : 0;
+        live.tools = out.calls.map((c) => c.name).filter(Boolean);
+      }
+    }
+  }
+  return out;
+}
+
+// The text so far of one string field inside JSON that is still arriving.
+function partialField(json, field) {
+  const m = new RegExp(`"${field}"\\s*:\\s*"`).exec(json || "");
+  if (!m) return "";
+  let text = "";
+  let escaped = false;
+  for (const ch of json.slice(m.index + m[0].length)) {
+    if (escaped) {
+      text += ch === "n" ? "\n" : ch === "t" ? "\t" : ch;
+      escaped = false;
+    } else if (ch === "\\") escaped = true;
+    else if (ch === '"') break;
+    else text += ch;
+  }
+  return text;
+}
+
 // ---------- the room ----------
 export class Room extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
-    this.mem = { busy: {}, joins: {}, hits: {}, verified: {}, inflight: 0, queue: [], knowledge: null };
+    this.mem = { busy: {}, joins: {}, hits: {}, verified: {}, inflight: 0, queue: [], knowledge: null, progress: {} };
     this.ready = ctx.blockConcurrencyWhile(() => this.load());
   }
 
@@ -464,7 +546,10 @@ export class Room extends DurableObject {
     for (let n = 2; this.room.members[id]; n++) id = `${base}${n}`;
     const token = btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(24)))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
     this.seats[await sha256(token)] = { id, at: t };
-    this.room.members[id] = { github: "", display };
+    const taken = new Set(Object.values(this.room.members).map((m) => m.display.toLowerCase()));
+    let shown = display;
+    for (let n = 2; taken.has(shown.toLowerCase()); n++) shown = `${display} ${n}`;
+    this.room.members[id] = { github: "", display: shown };
     this.room.who[id] = { mode: "human", autonomy: "ask" };
     await this.ctx.storage.put({ seats: this.seats, room: this.room });
     return { seat: token, me: id };
@@ -501,7 +586,7 @@ export class Room extends DurableObject {
     if (next) next();
   }
 
-  async model(messages, tools) {
+  async model(messages, tools, key = "") {
     if (this.llm.spent >= this.budget) throw new Refusal(402, `the demo's model budget ($${this.budget.toFixed(2)}) is used up`);
     const route = this.env.ROUTE || "xai/zdr/us";
     const body = {
@@ -510,14 +595,17 @@ export class Room extends DurableObject {
       max_tokens: 6000,
       tools,
       tool_choice: "required",
+      stream: true,
       reasoning: { effort: this.env.EFFORT || "minimal" },
       usage: { include: true },
       // xai/zdr/us answered in ~3s where default routing took 10-20s (2026-09-30).
       provider: route ? { order: [route], allow_fallbacks: true } : undefined,
     };
     const queued = Date.now();
+    const live = key ? (this.mem.progress[key] ||= { started: Date.now(), queued: true, first: 0, partial: "", bytes: 0, tools: [] }) : null;
     await this.slot();
     const started = Date.now();
+    if (live) live.queued = false;
     let data;
     try {
       const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
@@ -527,19 +615,18 @@ export class Room extends DurableObject {
         signal: AbortSignal.timeout(90000),
       });
       if (!res.ok) throw new Error(`model endpoint ${res.status}: ${(await res.text()).slice(0, 200)}`);
-      data = await res.json();
+      data = await readStream(res, live);
     } finally {
       this.release();
-    }
-    const took = (Date.now() - started) / 1000;
+    }    const took = (Date.now() - started) / 1000;
     const usage = data.usage || {};
-    const message = data.choices?.[0]?.message || {};
-    const calls = (message.tool_calls || []).map((c) => {
+    const message = { content: data.content };
+    const calls = data.calls.map((c) => {
       let args = {};
       try {
-        args = JSON.parse(c.function?.arguments || "{}");
+        args = JSON.parse(c.args || "{}");
       } catch {}
-      return { name: c.function?.name || "", args: args && typeof args === "object" ? args : {} };
+      return { name: c.name, args: args && typeof args === "object" ? args : {} };
     });
     const trace = {
       via: "OpenRouter", id: data.id || "", model: data.model || body.model, provider: data.provider || "", route, effort: body.reasoning.effort,
@@ -547,6 +634,7 @@ export class Room extends DurableObject {
       tokens_in: usage.prompt_tokens || 0, tokens_out: usage.completion_tokens || 0, reasoning: usage.completion_tokens_details?.reasoning_tokens || 0,
       cost: Number(usage.cost || 0), tools_offered: tools.map((t) => t.function.name),
       tool_calls: calls.map((c) => ({ name: c.name, args: shortArgs(c.args) })),
+      first_token: data.first ? Math.round((data.first - started) / 10) / 100 : null,
       at: new Date().toISOString().slice(11, 19) + " UTC",
     };
     this.llm.spent += trace.cost;
@@ -577,12 +665,12 @@ export class Room extends DurableObject {
         const res = await this.env.ASSETS.fetch(new Request(`https://assets.local${path}`));
         return res.ok ? res.text() : "";
       };
-      const [pitch, why, security, shortcuts] = await Promise.all([read("/knowledge/pitch.md"), read("/knowledge/why.md"), read("/knowledge/security.md"), read("/shortcuts.json")]);
+      const [pitch, why, security, hosting, shortcuts] = await Promise.all([read("/knowledge/pitch.md"), read("/knowledge/why.md"), read("/knowledge/security.md"), read("/knowledge/hosting.md"), read("/shortcuts.json")]);
       let rows = [];
       try {
         rows = JSON.parse(shortcuts);
       } catch {}
-      this.mem.knowledge = { pitch, why, security, shortcuts: rows.map((r) => `- ${r.keys.map((k) => (k === "Mod" ? "Ctrl or Cmd" : k)).join(" + ")}: ${r.does}`).join("\n") };
+      this.mem.knowledge = { pitch, why, security, hosting, shortcuts: rows.map((r) => `- ${r.keys.map((k) => (k === "Mod" ? "Ctrl or Cmd" : k)).join(" + ")}: ${r.does}`).join("\n") };
     }
     return this.mem.knowledge;
   }
@@ -595,12 +683,13 @@ export class Room extends DurableObject {
     const k = await this.knowledge();
     return [
       `You are ${this.hostName}'s Grok, the host of this demo room at the SpaceX xAI hackathon. Jurors join from their phones and their Groks ask you for things. You already have ${this.hostName}'s permission to answer them.`,
-      "When a task asks for a page or a handover, write the HTML. Otherwise answer in summary, plainly and briefly (under 120 words). Refer to people by name, not pronouns.",
+      "When a task asks for a page or a handover, write the HTML. Otherwise put the whole answer in summary. Refer to people by name, not pronouns.",
       `The Ctrl+K menu in this app (open it with Ctrl+K or Cmd+K, or the ⌘K button on a phone) has these shortcuts:\n${k.shortcuts}`,
       "It also has commands: ask the host's Grok one of the four starter questions, accept the task your Grok is holding, let your Grok act on its own or ask first, show the room, open the latest handover, show the QR code, switch theme.",
       k.pitch,
       k.why,
       k.security,
+      k.hosting,
       "Facts you may use: the repo is github.com/carol-to-albina/tin-can. The plugin has four skills (check-room, speak-in-room, handover, live-in-the-room) and a /room command. The marketplace pull request is xai-org/plugin-marketplace #1018. This demo runs on Cloudflare Workers with a Durable Object holding the room, and uses x-ai/grok-4.7 through OpenRouter to stand in for Grok bots, with the lowest reasoning setting so it answers fast. Do not invent other numbers, users, or quotes.",
     ].join("\n\n");
   }
@@ -749,7 +838,14 @@ export class Room extends DurableObject {
     const tools = TOOLS.filter((t) => allowed.has(t.function.name));
     const prompt = parts.join("\n\n");
     const past = (this.hist[me] || []).slice(-HISTORY);
-    const result = await this.model([{ role: "system", content: system }, ...past, { role: "user", content: prompt }], tools);
+    const key = mode === "task" ? accept : "";
+    if (key) this.mem.progress[key] ||= { started: Date.now(), queued: true, first: 0, partial: "", bytes: 0, tools: [] };
+    let result;
+    try {
+      result = await this.model([{ role: "system", content: system }, ...past, { role: "user", content: prompt }], tools, key);
+    } finally {
+      if (key) delete this.mem.progress[key];
+    }
     const trace = { ...result.trace, payer };
     if (this.isLive) await this.charge(payer, trace.cost);
 
@@ -762,7 +858,7 @@ export class Room extends DurableObject {
         continue;
       }
       try {
-        if (fn === "reply") said.push(String(args.text || "").trim());
+        if (fn === "reply") said.push(tidy(args.text).trim());
         else if (fn === "send_message") actions.push(this.action(me, await this.append(me, { kind: "speech", to: this.memberId(args.to), body: String(args.text || "").slice(0, 4000) })));
         else if (fn === "send_task") actions.push(this.action(me, await this.append(me, { kind: "task", to: this.memberId(args.to), body: String(args.job || "").slice(0, 4000) })));
         else if (fn === "finish_task") {
@@ -804,12 +900,12 @@ export class Room extends DurableObject {
     const actions = [];
     const files = [];
     if (!claims.length) actions.push(this.action(me, await this.append(me, { kind: "claim", ref })));
-    let body = String(args.summary || "").trim().slice(0, 4000) || "Done.";
+    let body = tidy(args.summary).trim().slice(0, 4000) || "Done.";
     const html = String(args.html || "");
     if (html.trim()) {
       const title = String(args.title || "Handover").trim().slice(0, 80);
       const name = `${me.slice(0, 20)}-${slug(title)}-${Math.floor(Date.now() / 1000)}.html`;
-      const kept = html.slice(0, MAX_HTML);
+      const kept = html.replace(/\u2014/g, ",").slice(0, MAX_HTML);
       const meta = { name, title, by: me, for: task.writer, task: ref, bytes: kept.length, at: Date.now() / 1000, gen: trace.id };
       this.files[name] = meta;
       await this.ctx.storage.put({ [`file:${name}`]: kept, files: this.files });
@@ -846,7 +942,7 @@ export class Room extends DurableObject {
 
   async relay(me, l) {
     const who = this.name(l.writer);
-    if (l.kind === "claim") return this.log(me, { from: "bot", text: `${who}'s Grok is on it.`, status: true });
+    if (l.kind === "claim") return; // the live progress card already shows this
     if (l.kind === "done") {
       const [body] = (l.body || "").split("\n\nHandover: ");
       const files = Object.values(this.files).filter((f) => f.task === l.ref);
@@ -880,10 +976,37 @@ export class Room extends DurableObject {
       credit: me === this.host ? null : { left: Math.max(0, Math.round((this.credit - (this.ledger[me] || 0)) * 10000) / 10000), total: this.credit },
       chat: this.chats[me] || [], busy: (this.mem.busy[me] || 0) > 0, pending: this.pending(me).map(refOf),
       members, lines: lines.slice(-80), files: Object.values(this.files).sort((a, b) => a.at - b.at).slice(-30),
-      asks: ASKS, jobs: me === this.host ? JOBS : [],
+      asks: ASKS, pick: pickFor(this.name(me)), jobs: me === this.host ? JOBS : [],
+      progress: this.progressFor(me),
       model: { name: this.env.MODEL || "x-ai/grok-4.7", effort: this.env.EFFORT || "minimal", calls: this.llm.calls, tools: this.llm.tools, spent: Math.round(this.llm.spent * 10000) / 10000, budget: this.budget },
       errors: [],
     };
+  }
+
+  // Work in flight that this member is waiting on or doing: what the page draws as the tin-can card.
+  progressFor(me) {
+    const lines = this.lines();
+    const finished = new Set(lines.filter((l) => l.kind === "done" || l.kind === "fail").map((l) => l.ref));
+    const claimed = new Set(lines.filter((l) => l.kind === "claim").map((l) => l.ref));
+    return lines
+      .filter((l) => l.kind === "task" && !finished.has(refOf(l)) && (l.writer === me || l.to === me))
+      .map((l) => {
+        const ref = refOf(l);
+        const p = this.mem.progress[ref];
+        const worker = l.to;
+        return {
+          ref, from: l.writer, fromName: this.name(l.writer), to: worker, toName: this.name(worker), mine: l.writer === me,
+          job: l.body || "", elapsed: Math.max(0, (Date.now() - Date.parse(l.ts)) / 1000),
+          waiting: !p && !claimed.has(ref) && this.autonomy(worker) !== "auto" && !this.answered(worker, ref),
+          started: !!p || claimed.has(ref), queued: !!p?.queued, writing: !!p?.first,
+          partial: p?.partial || "", bytes: p?.bytes || 0, tools: p?.tools || [],
+        };
+      })
+      .filter((x) => x.mine || x.started);
+  }
+
+  answered(member, ref) {
+    return (this.chats[member] || []).some((m) => m.accept === ref || m.decline === ref);
   }
 
   duetState() {

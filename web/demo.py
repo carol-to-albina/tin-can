@@ -20,12 +20,22 @@ HERE = Path(__file__).resolve().parent
 KNOW = HERE / "knowledge"
 
 # One tap for a juror. Each goes to the host's Grok as a task.
+# "for": first names that get this question picked for them when they join.
 ASKS = [
-    {"id": "handover", "label": "HTML handover: why TinCan should win", "job": "Send me a one-page HTML handover on why TinCan should win the SpaceX xAI hackathon."},
-    {"id": "security", "label": "Your security gaps", "job": "What are TinCan's security gaps? Be specific and honest."},
-    {"id": "shortcuts", "label": "Ctrl+K shortcuts here", "job": "What are the Ctrl+K command shortcuts in this app?"},
-    {"id": "pitch", "label": "What's the pitch?", "job": "What's the pitch? Give it to me in 30 seconds."},
+    {"id": "handover", "label": "HTML handover: why TinCan should win", "job": "Send me a one-page HTML handover on why TinCan should win the SpaceX xAI hackathon.", "for": []},
+    {"id": "hosting", "label": "How is the room hosted?", "job": "How is this room hosted? What runs where, and what would change in the real product?", "for": ["daniel"]},
+    {"id": "security", "label": "Your security gaps", "job": "What are TinCan's security gaps? Be specific and honest.", "for": ["petr"]},
+    {"id": "shortcuts", "label": "Ctrl+K shortcuts here", "job": "What are the Ctrl+K command shortcuts in this app?", "for": ["ben"]},
+    {"id": "pitch", "label": "What's the pitch?", "job": "What's the pitch? Give it to me in 30 seconds.", "for": ["kate"]},
 ]
+
+
+def pick_for(display: str) -> str:
+    import unicodedata
+
+    first = unicodedata.normalize("NFD", (str(display or "").split() or [""])[0].lower())
+    first = "".join(ch for ch in first if not unicodedata.combining(ch))
+    return next((a["id"] for a in ASKS if first in a["for"]), "")
 
 # One tap for the host: work to hand a juror's Grok.
 JOBS = [
@@ -63,12 +73,13 @@ def host_memory(display: str) -> str:
     return "\n\n".join(
         [
             f"You are {display}'s Grok, the host of this demo room at the SpaceX xAI hackathon. Jurors join from their phones and their Groks ask you for things. You already have {display}'s permission to answer them.",
-            "When a task asks for a page or a handover, write the HTML. Otherwise answer in summary, plainly and briefly (under 120 words). Refer to people by name, not pronouns.",
+            "When a task asks for a page or a handover, write the HTML. Otherwise put the whole answer in summary. Refer to people by name, not pronouns.",
             "The Ctrl+K menu in this app (open it with Ctrl+K or Cmd+K, or the ⌘K button on a phone) has these shortcuts:\n" + shortcuts_text(),
             "It also has commands: ask the host's Grok one of the four starter questions, accept the task your Grok is holding, let your Grok act on its own or ask first, show the room, open the latest handover, show the QR code, switch theme.",
             read_knowledge("pitch"),
             read_knowledge("why"),
             read_knowledge("security"),
+            read_knowledge("hosting"),
             "Facts you may use: the repo is github.com/carol-to-albina/tin-can. The plugin has four skills (check-room, speak-in-room, handover, live-in-the-room) and a /room command. The marketplace pull request is xai-org/plugin-marketplace #1018. This demo uses x-ai/grok-4.7 through OpenRouter to stand in for Grok bots, with the lowest reasoning setting so it answers fast. Do not invent other numbers, users, or quotes.",
         ]
     )
@@ -200,12 +211,11 @@ class Live:
         return guest_memory(self.cab.roster().get(member, {}).get("display", member), self.host_name)
 
     def host_token(self, path: Path) -> str:
-        """The presenter's seat. Kept in a 600 file so a restart keeps the same link."""
-        if path.is_file():
-            token = path.read_text().strip()
-            if self.seats.who(token) == self.host:
-                return token
-        token = self.seats.add(self.host, "local", host=True)
+        """The presenter's seat. Kept in a 600 file, and never replaced once it exists, because the
+        Cloudflare deploy holds the same token as its HOST_TOKEN secret."""
+        if path.is_file() and path.read_text().strip():
+            return path.read_text().strip()
+        token = secrets.token_urlsafe(24)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.touch(mode=0o600)
         path.write_text(token)
@@ -226,7 +236,11 @@ class Live:
             token = self.seats.add(mid, ip)
             path = self.room_dir / ".tincan" / "room.json"
             room = json.loads(path.read_text())
-            room["members"][mid] = {"github": "", "display": name}
+            taken = {m["display"].lower() for m in room["members"].values()}
+            shown, n = name, 2
+            while shown.lower() in taken:
+                shown, n = f"{name} {n}", n + 1
+            room["members"][mid] = {"github": "", "display": shown}
             path.write_text(json.dumps(room, indent=2) + "\n")
             (self.room_dir / ".tincan" / "who" / f"{mid}.json").write_text(json.dumps({"mode": "human", "autonomy": "ask"}) + "\n")
         return token, mid
@@ -268,11 +282,50 @@ class Live:
             "lines": sorted(lines, key=lambda l: (l["ts"], l["writer"], l["seq"]))[-80:],
             "files": self.bots.file_list()[-30:],
             "asks": ASKS,
+            "pick": pick_for(roster.get(me, {}).get("display", "")),
+            "progress": self.progress(me, lines),
             "jobs": JOBS if me == self.host else [],
             "model": {"name": self.llm.model, "effort": self.llm.effort, "calls": self.llm.calls, "tools": self.llm.tool_calls,
                       "spent": round(self.llm.spent, 4), "budget": self.llm.budget},
             "errors": errors,
         }
+
+
+def _elapsed(ts: str) -> float:
+    from datetime import datetime, timezone
+
+    try:
+        return max(0.0, (datetime.now(timezone.utc) - datetime.strptime(ts, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)).total_seconds())
+    except ValueError:
+        return 0.0
+
+
+def _progress(self, me: str, lines: list[dict]) -> list[dict]:
+    """Work in flight that this member is waiting on or doing. No streaming here, so no partial text."""
+    finished = {l.get("ref") for l in lines if l["kind"] in ("done", "fail")}
+    claimed = {l.get("ref") for l in lines if l["kind"] == "claim"}
+    policies = self.cab.policies()
+    out = []
+    for l in lines:
+        ref = f"{l['writer']}:{l['seq']}"
+        if l["kind"] != "task" or ref in finished or me not in (l["writer"], l["to"]):
+            continue
+        worker = l["to"]
+        started = ref in self.bots.working or ref in claimed
+        answered = any(m.get("accept") == ref or m.get("decline") == ref for m in self.bots.chat_of(worker))
+        item = {
+            "ref": ref, "from": l["writer"], "fromName": self.cab.roster().get(l["writer"], {}).get("display", l["writer"]),
+            "to": worker, "toName": self.cab.roster().get(worker, {}).get("display", worker), "mine": l["writer"] == me,
+            "job": l.get("body", ""), "elapsed": _elapsed(l["ts"]),
+            "waiting": not started and policies.get(worker, {}).get("autonomy", "ask") != "auto" and not answered,
+            "started": started, "queued": False, "writing": False, "partial": "", "bytes": 0, "tools": [],
+        }
+        if item["mine"] or item["started"]:
+            out.append(item)
+    return out
+
+
+Live.progress = _progress
 
 
 class Duet:

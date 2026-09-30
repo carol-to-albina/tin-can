@@ -166,9 +166,14 @@ function render() {
   // one-tap asks
   const busyHost = member(host)?.busy;
   $("#asks").classList.toggle("grid", !S.chat.length);
+  const asks = [...S.asks].sort((a, b) => (b.id === S.pick) - (a.id === S.pick));
   $("#asks").innerHTML = S.isHost
     ? ""
-    : S.asks.map((a) => `<button class="ask" data-ask="${esc(a.id)}">${esc(a.label)}</button>`).join("");
+    : asks
+        .map((a) => a.id === S.pick
+          ? `<button class="ask pick" data-ask="${esc(a.id)}"><span class="pick-tag">Picked for you</span>${esc(a.label)}</button>`
+          : `<button class="ask" data-ask="${esc(a.id)}">${esc(a.label)}</button>`)
+        .join("");
 
   // host: hand a guest's Grok a job
   const guests = S.members.filter((m) => !m.host);
@@ -195,6 +200,8 @@ function render() {
     if (stick) box.scrollTop = box.scrollHeight;
   }
 
+  renderLive();
+
   // drawer
   $("#members").innerHTML = S.members
     .map((m) => `<div class="person">${avatar(m.id)}<span class="person-name">${esc(m.display)}${m.id === me ? " (you)" : ""}</span>
@@ -214,13 +221,89 @@ function render() {
 
 function emptyHTML() {
   if (S.isHost) {
-    return `<div class="hello"><h2>Hi ${esc(S.name)}.</h2><p>Jurors' Groks will ask yours for things, and it answers on its own. You'll see each request here as it happens.</p>
+    return `<div class="hello">${window.tincanLogo()}<h2>Hi ${esc(S.name)}.</h2><p>Jurors' Groks will ask yours for things, and it answers on its own. You'll see each request here as it happens.</p>
       <p>To give someone's Grok a job, pick them and a job below, or type something like "ask Petr's Grok to score the pitch".</p></div>`;
   }
-  return `<div class="hello"><h2>Hi ${esc(S.name)}. This is your Grok.</h2>
-    <p>Tap a question below, or type your own. Your Grok passes it to ${esc(S.hostName)}'s Grok, which does the work and sends it back here.</p>
+  const pick = S.asks.find((a) => a.id === S.pick);
+  return `<div class="hello">${window.tincanLogo()}<h2>Hi ${esc(S.name)}. This is your Grok.</h2>
+    <p>${pick ? `Start with the question picked for you, "${esc(pick.label)}", or tap any other, or type your own.` : "Tap a question below, or type your own."} Your Grok passes it to ${esc(S.hostName)}'s Grok along the string, and you can watch the answer come back.</p>
     <p class="muted">If ${esc(S.hostName)} hands your Grok a job, it shows up here and waits for your yes.</p></div>`;
 }
+
+// ---------- live cards: work on the string ----------
+// One card per task still in flight. Cards are built once and then updated in place,
+// so the dot on the string keeps moving between polls instead of restarting.
+const cards = new Map(); // ref -> { el, base, at }
+
+function stageOf(p) {
+  if (p.waiting) return "asked";
+  if (p.writing) return "writing";
+  if (p.started) return "thinking";
+  return "sent";
+}
+
+function renderLive() {
+  const live = $("#live");
+  const box = $("#scroll");
+  const stick = box.scrollHeight - box.scrollTop - box.clientHeight < 200;
+  const seen = new Set();
+  for (const p of S.progress || []) {
+    seen.add(p.ref);
+    let card = cards.get(p.ref);
+    if (!card) {
+      const el = document.createElement("div");
+      el.className = "tc-card";
+      el.innerHTML = `<div class="tc-top"><b></b><span class="tc-timer">0.0s</span></div>
+        <div class="tc-art">${window.tincanLogo({ dots: true })}</div>
+        <div class="tc-names"><span class="tc-left"></span><span class="tc-right"></span></div>
+        <ol class="tc-steps"><li></li><li></li><li></li><li></li></ol>
+        <p class="tc-hint">Waiting for xAI's first token. In our tests that took 3 to 15 seconds.</p>
+        <div class="tc-partial text"></div><div class="tc-bytes"></div>`;
+      live.append(el);
+      card = { el };
+      cards.set(p.ref, card);
+    }
+    card.base = p.elapsed;
+    card.at = performance.now();
+    const el = card.el;
+    const stage = stageOf(p);
+    el.dataset.stage = stage;
+    const worker = p.mine ? `${p.toName}'s Grok` : "Your Grok";
+    const asker = p.mine ? "Your Grok" : `${p.fromName}'s Grok`;
+    $(".tc-top b", el).textContent = p.mine ? `${p.job}` : `${p.fromName} asked: ${p.job}`;
+    $(".tc-left", el).textContent = asker;
+    $(".tc-right", el).textContent = worker;
+    const steps = [
+      [`${asker} put it in the can`, "done"],
+      p.waiting
+        ? [`Waiting for ${p.mine ? p.toName : "you"} to tap Accept`, "now"]
+        : [`The string woke ${p.mine ? `${p.toName}'s Grok` : "your Grok"}`, p.started ? "done" : "now"],
+      [`${worker} is thinking${p.queued ? " (waiting for a free model slot)" : " with x-ai/grok-4.7"}`, p.writing ? "done" : p.started ? "now" : ""],
+      [`${worker} is writing${p.tools.includes("finish_task") ? " the answer" : ""}`, p.writing ? "now" : ""],
+    ];
+    el.querySelectorAll(".tc-steps li").forEach((li, i) => {
+      li.textContent = steps[i][0];
+      li.className = steps[i][1];
+    });
+    const partial = $(".tc-partial", el);
+    if (partial.textContent !== p.partial) partial.textContent = p.partial;
+    $(".tc-bytes", el).textContent = p.bytes ? `handover.html · ${(p.bytes / 1024).toFixed(1)} KB written` : "";
+  }
+  for (const [ref, card] of cards) {
+    if (!seen.has(ref)) {
+      card.el.remove();
+      cards.delete(ref);
+    }
+  }
+  if (stick && cards.size) box.scrollTop = box.scrollHeight;
+}
+
+setInterval(() => {
+  for (const card of cards.values()) {
+    const t = card.base + (performance.now() - card.at) / 1000;
+    $(".tc-timer", card.el).textContent = `${t.toFixed(1)}s`;
+  }
+}, 100);
 
 // ---------- loop ----------
 async function refresh() {
@@ -236,7 +319,7 @@ function poll() {
   poll.t = setTimeout(async () => {
     if (!document.hidden) await refresh();
     poll();
-  }, 1300);
+  }, S?.progress?.length ? 600 : 1300);
 }
 
 // ---------- actions ----------

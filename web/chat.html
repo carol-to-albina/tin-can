@@ -11,9 +11,7 @@
 <div class="cv" id="cv">
   <main class="cv-main">
     <header class="cv-top">
-      <a class="mark" href="/" aria-label="TinCan home">
-        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 5.5h12v13H6z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M6 9.5h12M6 14.5h12" stroke="currentColor" stroke-width="1.3"/><path d="M18 12c2.5 0 3.5 1.2 3.5 3" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
-      </a>
+      <a class="mark-logo" href="/" aria-label="TinCan home" data-logo="mini"></a>
       <div class="cv-title"><b id="who">Your Grok</b><span id="sub"></span></div>
       <span class="pill mono" id="credit" hidden></span>
       <button class="kbd-btn" id="k-btn" title="Command menu (Ctrl+K)"><kbd id="k-mod">Ctrl</kbd><kbd>K</kbd></button>
@@ -24,7 +22,7 @@
     </header>
 
     <div class="scroll" id="scroll">
-      <div class="column" id="messages"></div>
+      <div class="column"><div id="messages"></div><div id="live" aria-live="polite"></div></div>
     </div>
 
     <div class="dock">
@@ -100,6 +98,7 @@
 </div>
 
 <div class="toast" id="toast" role="status" hidden></div>
+<script src="logo.js"></script>
 <script src="chat.js"></script>
 </body>
 </html>

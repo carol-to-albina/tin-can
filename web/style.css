@@ -677,3 +677,55 @@ kbd { font: 11px var(--font); padding: 2px 6px; border-radius: 6px; background: 
 .film-box { position: relative; width: min(1280px, 100%); }
 .film-box video { width: 100%; max-height: 86vh; border-radius: 14px; background: #000; display: block; }
 .film-close { position: absolute; top: -44px; right: 0; color: #fff; }
+
+/* ================= the tin-can mark and the live card ================= */
+.tc-face { fill: var(--text); }
+.tc-eye { fill: var(--bg); }
+.tc-string { fill: none; stroke: #a07a4a; stroke-width: 1.8; stroke-linecap: round; }
+.tc-can rect { fill: url(#tcCan); stroke: #2b2b2b; stroke-width: 1.2; }
+.tc-can path { stroke: #8a8d93; stroke-width: .8; }
+.tc-can ellipse { fill: #d9dadd; stroke: #2b2b2b; stroke-width: 1; }
+.mark-logo { display: block; width: 58px; flex: none; }
+.mark-logo .tc-logo { width: 58px; height: auto; display: block; }
+.land-mark { gap: 14px; }
+.land-logo .tc-logo { width: 150px; height: auto; display: block; }
+@media (max-width: 860px) { .land-logo .tc-logo { width: 120px; } }
+
+.tc-card {
+  border: 1px solid var(--border-strong); border-radius: 20px; background: var(--surface);
+  padding: 14px 16px 12px; margin: 0 0 24px; box-shadow: var(--shadow); max-width: 560px;
+}
+.tc-top { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text-2); }
+.tc-top b { color: var(--text); font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tc-timer { font: 12px var(--mono); color: var(--text-3); }
+.tc-art { position: relative; margin: 6px auto 2px; width: 240px; }
+.tc-art .tc-logo { width: 240px; height: 80px; display: block; overflow: visible; }
+.tc-names { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-3); margin: -2px 0 8px; }
+.tc-dot { fill: var(--accent); filter: drop-shadow(0 0 4px var(--accent)); display: none; }
+.tc-card[data-stage="sent"] .tc-go, .tc-card[data-stage="thinking"] .tc-go { display: inline; }
+.tc-card[data-stage="writing"] .tc-back { display: inline; }
+.tc-card[data-stage="thinking"] .tc-can-r, .tc-card[data-stage="writing"] .tc-can-r { animation: tc-buzz .35s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+.tc-card[data-stage="asked"] .tc-string { stroke-dasharray: 4 5; }
+@keyframes tc-buzz { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-4deg); } 75% { transform: rotate(4deg); } }
+.tc-steps { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 6px; font-size: 14px; }
+.tc-steps li { display: flex; align-items: center; gap: 10px; color: var(--text-3); }
+.tc-steps li::before { content: ""; width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--border-strong); flex: none; box-sizing: border-box; }
+.tc-steps li.done { color: var(--text-2); }
+.tc-steps li.done::before { border-color: var(--ok); background: var(--ok); box-shadow: inset 0 0 0 2px var(--surface); }
+.tc-steps li.now { color: var(--text); }
+.tc-steps li.now::before { border-color: var(--border-strong); border-top-color: var(--accent); animation: spin .8s linear infinite; }
+.tc-partial { margin-top: 10px; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); font-size: 14px; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 220px; overflow: auto; }
+.tc-partial:empty { display: none; }
+.tc-partial::after { content: "▍"; color: var(--accent); animation: blink 1s steps(2) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+.tc-bytes { margin-top: 8px; font: 12px var(--mono); color: var(--ok); }
+.tc-bytes:empty { display: none; }
+
+.ask.pick { border-color: color-mix(in srgb, var(--accent) 55%, transparent); background: color-mix(in srgb, var(--accent) 10%, var(--surface)); }
+.dock .asks.grid .ask.pick { grid-column: 1 / -1; font-weight: 600; min-height: 58px; }
+.ask .pick-tag { display: block; font-size: 11px; font-weight: 500; color: var(--accent); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 2px; }
+.hello .tc-logo { width: 180px; height: auto; margin-bottom: 18px; }
+
+.dock .asks:not(.grid) .pick-tag { display: none; }
+.tc-hint { display: none; margin: 10px 0 0; font-size: 13px; color: var(--text-3); }
+.tc-card[data-stage="thinking"] .tc-hint { display: block; }

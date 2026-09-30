@@ -81,11 +81,20 @@ TOOLS = [
     },
 ]
 
-STYLE = (
-    "Write like a person texting: short sentences, plain words. No em dashes. No hype words "
-    "(crucial, seamless, robust, pivotal, game-changer). No 'Great question', no 'I hope this helps', "
-    "no offer at the end unless you need a yes."
-)
+# Condensed from blader/humanizer (SKILL.md v3.1.0), so answers read like a person wrote them.
+STYLE = """Writing rules (from the humanizer guide):
+- State the point directly. No "not X but Y" or "it's not just X, it's Y" contrasts. No one-line closer that repeats the point. No staged openers like "Here's the thing" or "Let's dive in".
+- No em dashes or en dashes. Use commas, periods, colons or parentheses.
+- No lists of three just for rhythm. No bold labels. No emojis.
+- No stock AI words: crucial, seamless, robust, pivotal, delve, vibrant, showcase, testament, landscape, underscore, game-changer, leverage.
+- No "Great question", "I hope this helps", "Let me know", "Feel free to".
+- Prefer plain verbs (is, are, has). Mix short and long sentences. Keep every fact you were given and add none.
+Length: answers under 90 words, or at most 6 short bullet lines ("- ") when listing things. Handover pages follow the same rules, with short sentence-case headings."""
+
+
+def tidy(text) -> str:
+    """A model may still slip in a dash; swap it for a comma so the text follows the rules."""
+    return re.sub(r"\s+\u2013\s+", ", ", re.sub(r"\s*\u2014\s*", ", ", str(text or "")))
 
 SYSTEM = """You are {name}'s Grok. You speak only with {name}, in {name}'s own chat.
 {name} is in a TinCan room: a shared log where each person's Grok posts lines for the others.
@@ -265,6 +274,7 @@ class Bots:
         self.forward_to = forward_to
         self.ledger = ledger  # object with can_spend(member) and charge(member, usd)
         self.traces: dict[str, dict] = {}  # done ref -> the model call that produced it
+        self.working: dict[str, float] = {}  # task ref -> when a Grok started on it
         self.files_dir = files_dir
         self.files_url = files_url
         self.files_dir.mkdir(parents=True, exist_ok=True)
@@ -432,7 +442,13 @@ class Bots:
         prompt = "\n\n".join(parts)
         with self.guard:
             past = list(self.history.get(me, []))[-HISTORY:]
-        result, trace = self.llm.call([{"role": "system", "content": system}, *past, {"role": "user", "content": prompt}], tools)
+            if mode == "task":
+                self.working[accept] = time.time()
+        try:
+            result, trace = self.llm.call([{"role": "system", "content": system}, *past, {"role": "user", "content": prompt}], tools)
+        finally:
+            with self.guard:
+                self.working.pop(accept, None)
         trace["payer"] = payer
         if self.ledger:
             self.ledger.charge(payer, trace["cost"])
@@ -445,7 +461,7 @@ class Bots:
                 continue
             try:
                 if fn == "reply":
-                    said.append(str(args.get("text", "")).strip())
+                    said.append(tidy(args.get("text", "")).strip())
                 elif fn == "send_message":
                     line = self.cab.append(me, {"kind": "speech", "to": self._member_id(args.get("to"), members), "body": str(args.get("text", ""))[:4000]})
                     actions.append(self._action(me, line))
@@ -494,7 +510,7 @@ class Bots:
         actions, files = [], []
         if not claims:
             actions.append(self._action(me, self.cab.append(me, {"kind": "claim", "ref": ref})))
-        body = str(args.get("summary", "")).strip()[:4000] or "Done."
+        body = tidy(args.get("summary", "")).strip()[:4000] or "Done."
         html = str(args.get("html") or "")
         if html.strip():
             title = str(args.get("title") or "Handover").strip()[:80]
@@ -541,8 +557,8 @@ class Bots:
         who = self._name(l["writer"])
         ref = f"{l['writer']}:{l['seq']}"
         if l["kind"] == "claim":
-            self._log(me, {"from": "bot", "text": f"{who}'s Grok is on it.", "status": True})
-        elif l["kind"] == "done":
+            return  # the live progress card already shows this
+        if l["kind"] == "done":
             body, _, tail = l.get("body", "").partition("\n\nHandover: ")
             files = [f for f in self.file_list() if f["task"] == l.get("ref")]
             with self.guard:
