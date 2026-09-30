@@ -41,7 +41,7 @@ python3 -m tincan sync --ack --push
 python3 -m tincan tasks
 ```
 
-`wake.type` `none` means no doorbell. You open the agent, or you poll. Copy the Cursor block below, or import `Room` and run `sketch/callers/daemon.py`.
+`wake.type` `none` means no doorbell. You open the agent, or you poll. Copy the Cursor block below, or import `Room` and run `docs/v3/callers/daemon.py`.
 
 ## Cursor AGENTS.md
 

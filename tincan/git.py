@@ -37,11 +37,6 @@ def commit_owned(root: Path, paths: list[Path], message: str, author: GitAuthor)
     raise NotImplementedError
 
 
-def author_matches(author: GitAuthor, login: str) -> bool:
-    """name == login, or email local-part == login, or local-part ends with +login."""
-    raise NotImplementedError
-
-
 def push(root: Path) -> None:
     raise NotImplementedError
 
