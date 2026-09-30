@@ -6,7 +6,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-from .types import ProtocolError, Seq
+from .types import ConflictError, ProtocolError, Seq
 
 
 @dataclass(frozen=True)
@@ -42,6 +42,20 @@ def _head_branch(root: Path) -> str:
     return run.stdout.strip() if run.returncode == 0 else ""
 
 
+def _upstream(root: Path) -> str:
+    """The tracked ref, empty when it is unset or the remote has no commit yet."""
+    run = _run(root, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}")
+    return run.stdout.strip() if run.returncode == 0 else ""
+
+
+def _remote(root: Path) -> str:
+    run = _run(root, "remote")
+    names = run.stdout.split() if run.returncode == 0 else []
+    if "origin" in names:
+        return "origin"
+    return names[0] if names else ""
+
+
 def require_repo(root: Path) -> None:
     run = _run(root, "rev-parse", "--is-inside-work-tree")
     if run.returncode != 0 or run.stdout.strip() != "true":
@@ -58,7 +72,23 @@ def require_branch(root: Path, branch: str) -> None:
 
 def pull(root: Path) -> None:
     """git pull --ff-only. ConflictError on non-fast-forward."""
-    raise NotImplementedError
+    require_repo(root)
+    if _upstream(root):
+        run = _run(root, "pull", "--ff-only")
+        if run.returncode != 0:
+            raise ConflictError(_why(run))
+        return
+    branch = _head_branch(root)
+    remote = _remote(root)
+    if not branch or not remote:
+        return
+    listing = _run(root, "ls-remote", "--heads", remote, branch)
+    if listing.returncode != 0 or not listing.stdout.strip():
+        return
+    raise ConflictError(
+        f"{remote}/{branch} exists and {branch} has no upstream; "
+        f"push with git push -u {remote} {branch} or clone the branch"
+    )
 
 
 def commit_owned(root: Path, paths: list[Path], message: str, author: GitAuthor) -> None:
