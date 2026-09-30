@@ -1,0 +1,38 @@
+name = "tincan"
+main = "src/worker.js"
+compatibility_date = "2026-08-01"
+
+# The pages in ../web. The worker runs first on every request to add security headers
+# and to send /api, /h and /d to the Durable Objects.
+[assets]
+directory = "../web"
+binding = "ASSETS"
+run_worker_first = true
+html_handling = "none"
+not_found_handling = "none"
+
+[[durable_objects.bindings]]
+name = "ROOM"
+class_name = "Room"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Room"]
+
+[vars]
+HOST_ID = "carol"
+HOST_NAME = "Carol"
+GITHUB = "rainbowpuffpuff"
+CREDIT = "0.30"
+BUDGET = "3.00"
+DUET_BUDGET = "1.00"
+MODEL = "x-ai/grok-4.7"
+EFFORT = "minimal"
+ROUTE = "xai/zdr/us"
+
+[observability]
+enabled = true
+
+# Secrets, never in this file:
+#   npx wrangler secret put OPENROUTER_API_KEY
+#   npx wrangler secret put HOST_TOKEN        (your seat; open /host#<token>)
