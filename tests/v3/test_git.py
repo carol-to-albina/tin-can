@@ -283,5 +283,42 @@ class AuthorOfLineTests(GitCase):
             git.author_of_line(work, out, Seq(2))
 
 
+class AddedSinceTests(GitCase):
+    def test_added_since_lists_the_seqs_a_revision_did_not_have(self) -> None:
+        work = self.seeded()
+        out = self.write(work, "out/carol.ndjson", '{"seq":1}\n{"seq":2}\n')
+        git.commit_owned(work, [out], "carol 2", ROSTER)
+        before = self.git(work, "rev-parse", "HEAD").stdout.strip()
+        out.write_text('{"seq":1}\n{"seq":2}\n{"seq":3}\n\n{"seq":4}\n')
+        self.assertEqual(git.added_since(work, out, before), [3, 4])
+
+    def test_added_since_treats_all_zeros_as_everything_new(self) -> None:
+        work = self.seeded()
+        out = self.write(work, "out/carol.ndjson", '{"seq":1}\n{"seq":2}\n')
+        git.commit_owned(work, [out], "carol 2", ROSTER)
+        self.assertEqual(git.added_since(work, out, "0" * 40), [1, 2])
+        self.assertEqual(git.added_since(work, out, ""), [1, 2])
+
+    def test_added_since_treats_a_file_the_revision_lacked_as_all_new(self) -> None:
+        work = self.seeded()
+        before = self.git(work, "rev-parse", "HEAD").stdout.strip()
+        out = self.write(work, "out/carol.ndjson", '{"seq":1}\n')
+        git.commit_owned(work, [out], "carol 1", ROSTER)
+        self.assertEqual(git.added_since(work, out, before), [1])
+
+    def test_added_since_is_empty_when_nothing_was_appended(self) -> None:
+        work = self.seeded()
+        out = self.write(work, "out/carol.ndjson", '{"seq":1}\n')
+        git.commit_owned(work, [out], "carol 1", ROSTER)
+        before = self.git(work, "rev-parse", "HEAD").stdout.strip()
+        self.assertEqual(git.added_since(work, out, before), [])
+
+    def test_added_since_dies_on_an_unknown_revision(self) -> None:
+        work = self.seeded()
+        out = self.write(work, "out/carol.ndjson", '{"seq":1}\n')
+        with self.assertRaises(ProtocolError):
+            git.added_since(work, out, "c0ffee" * 6 + "abcd")
+
+
 if __name__ == "__main__":
     unittest.main()
