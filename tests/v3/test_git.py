@@ -8,9 +8,10 @@ from pathlib import Path
 from unittest import mock
 
 from tincan import git
-from tincan.types import ConflictError, ProtocolError
+from tincan.types import ConflictError, ProtocolError, Seq
 
 ROSTER = git.GitAuthor("rainbowpuffpuff", "rainbowpuffpuff@users.noreply.github.com")
+ALBINA = git.GitAuthor("enjojoy", "enjojoy@users.noreply.github.com")
 
 
 class GitCase(unittest.TestCase):
@@ -242,6 +243,44 @@ class PushTests(GitCase):
         self.git(work, "init", "-b", "master")
         with self.assertRaises(ProtocolError):
             git.push(work)
+
+
+class AuthorOfLineTests(GitCase):
+    def test_author_of_line_names_the_commit_that_introduced_each_seq(self) -> None:
+        work = self.seeded()
+        out = self.write(work, "out/carol.ndjson", '{"seq":1}\n')
+        git.commit_owned(work, [out], "carol 1", ROSTER)
+        out.write_text('{"seq":1}\n{"seq":2}\n')
+        git.commit_owned(work, [out], "carol 2", ALBINA)
+        self.assertEqual(git.author_of_line(work, out, Seq(1)), ROSTER)
+        self.assertEqual(git.author_of_line(work, out, Seq(2)), ALBINA)
+
+    def test_author_of_line_skips_blank_lines(self) -> None:
+        work = self.seeded()
+        out = self.write(work, "out/carol.ndjson", '{"seq":1}\n')
+        git.commit_owned(work, [out], "carol 1", ROSTER)
+        out.write_text('{"seq":1}\n\n{"seq":2}\n')
+        git.commit_owned(work, [out], "carol 2", ALBINA)
+        self.assertEqual(git.author_of_line(work, out, Seq(2)), ALBINA)
+
+    def test_author_of_line_returns_the_sentinel_for_an_uncommitted_line(self) -> None:
+        work = self.seeded()
+        out = self.write(work, "out/carol.ndjson", '{"seq":1}\n')
+        git.commit_owned(work, [out], "carol 1", ROSTER)
+        out.write_text('{"seq":1}\n{"seq":2}\n')
+        self.assertEqual(git.author_of_line(work, out, Seq(2)), git.UNCOMMITTED)
+
+    def test_author_of_line_returns_the_sentinel_for_an_untracked_file(self) -> None:
+        work = self.seeded()
+        out = self.write(work, "out/carol.ndjson", '{"seq":1}\n')
+        self.assertEqual(git.author_of_line(work, out, Seq(1)), git.UNCOMMITTED)
+
+    def test_author_of_line_dies_when_the_file_has_no_such_seq(self) -> None:
+        work = self.seeded()
+        out = self.write(work, "out/carol.ndjson", '{"seq":1}\n')
+        git.commit_owned(work, [out], "carol 1", ROSTER)
+        with self.assertRaises(ProtocolError):
+            git.author_of_line(work, out, Seq(2))
 
 
 if __name__ == "__main__":
