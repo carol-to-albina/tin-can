@@ -2,10 +2,19 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
+from enum import Enum
 from pathlib import Path
+from typing import Any, TypeVar
 
 from .types import (
+    DEFAULT_AUTONOMY,
+    DEFAULT_LATENCY_SEC,
+    DEFAULT_MODE,
+    DEFAULT_WAKE,
+    PROTOCOL,
+    Autonomy,
     Dropped,
     Event,
     EventRef,
@@ -15,46 +24,122 @@ from .types import (
     Kind,
     Member,
     MemberId,
+    Mode,
     Position,
+    ProtocolError,
     RoomConfig,
     Seq,
     Task,
+    Wake,
+    WakeType,
     WhoFile,
 )
 
+E = TypeVar("E", bound=Enum)
+
 
 def cabinet_dir(root: Path) -> Path:
-    raise NotImplementedError
+    return root / ".tincan"
 
 
 def room_path(root: Path) -> Path:
-    raise NotImplementedError
+    return cabinet_dir(root) / "room.json"
 
 
 def who_path(root: Path, member: MemberId) -> Path:
-    raise NotImplementedError
+    return cabinet_dir(root) / "who" / f"{member}.json"
 
 
 def out_path(root: Path, member: MemberId) -> Path:
-    raise NotImplementedError
+    return cabinet_dir(root) / "out" / f"{member}.ndjson"
 
 
 def pos_path(root: Path, member: MemberId) -> Path:
-    raise NotImplementedError
+    return cabinet_dir(root) / "pos" / str(member)
 
 
 def local_me_path(root: Path) -> Path:
-    raise NotImplementedError
+    return cabinet_dir(root) / "local" / "me"
+
+
+def _object(raw: str, label: str) -> dict[str, Any]:
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as e:
+        raise ProtocolError(f"bad json in {label}: {e}") from e
+    if not isinstance(data, dict):
+        raise ProtocolError(f"{label} is not a json object")
+    return data
+
+
+def _enum(cls: type[E], raw: Any, default: E, label: str) -> E:
+    if raw is None or raw == "":
+        return default
+    try:
+        return cls(raw)
+    except ValueError as e:
+        raise ProtocolError(f"unknown {label} {raw!r}") from e
 
 
 def parse_room(raw: str) -> RoomConfig:
     """Die unless protocol is 3 and every roster id has a github login."""
-    raise NotImplementedError
+    data = _object(raw, "room.json")
+    if data.get("protocol") != PROTOCOL:
+        raise ProtocolError(
+            f"room.json protocol is {data.get('protocol')!r}, want {PROTOCOL}"
+        )
+    rows = data.get("members")
+    if not isinstance(rows, dict) or not rows:
+        raise ProtocolError("room.json needs a members object")
+    roster: dict[MemberId, tuple[str, str]] = {}
+    for raw_id, row in rows.items():
+        member = MemberId(str(raw_id))
+        if not isinstance(row, dict):
+            raise ProtocolError(f"room.json member {member} is not an object")
+        github = str(row.get("github") or "")
+        if not github:
+            raise ProtocolError(f"room.json member {member} has no github login")
+        roster[member] = (github, str(row.get("display") or member))
+    host = MemberId(str(data.get("host") or ""))
+    if host not in roster:
+        raise ProtocolError(f"room.json host {str(host)!r} is not in the roster")
+    return RoomConfig(
+        protocol=PROTOCOL,
+        room=str(data.get("room") or ""),
+        repo=str(data.get("repo") or ""),
+        branch=str(data.get("branch") or "master"),
+        host=host,
+        roster=roster,
+    )
+
+
+def load_room(root: Path) -> RoomConfig:
+    path = room_path(root)
+    if not path.exists():
+        raise ProtocolError(f"missing {path}")
+    return parse_room(path.read_text(encoding="utf-8"))
 
 
 def parse_who(raw: str) -> WhoFile:
     """Missing fields become HUMAN, ASK, NONE, 86400."""
-    raise NotImplementedError
+    data = _object(raw, "who file")
+    wake = data.get("wake") or {}
+    if not isinstance(wake, dict):
+        raise ProtocolError("who wake is not an object")
+    latency = data.get("latency_sec", DEFAULT_LATENCY_SEC)
+    if isinstance(latency, bool) or not isinstance(latency, int) or latency < 1:
+        raise ProtocolError(f"who latency_sec {latency!r} is not a positive integer")
+    return WhoFile(
+        display=str(data.get("display") or ""),
+        mode=_enum(Mode, data.get("mode"), DEFAULT_MODE, "mode"),
+        autonomy=_enum(Autonomy, data.get("autonomy"), DEFAULT_AUTONOMY, "autonomy"),
+        latency_sec=latency,
+        wake=Wake(
+            type=_enum(WakeType, wake.get("type"), DEFAULT_WAKE.type, "wake.type"),
+            url=str(wake.get("url") or ""),
+            key=str(wake.get("key") or ""),
+        ),
+    )
 
 
 def merge_member(
@@ -64,15 +149,31 @@ def merge_member(
     who: WhoFile | None,
 ) -> Member:
     """Missing who file uses HUMAN, ASK, NONE, 86400."""
-    raise NotImplementedError
+    policy = who or WhoFile(
+        "", DEFAULT_MODE, DEFAULT_AUTONOMY, DEFAULT_LATENCY_SEC, DEFAULT_WAKE
+    )
+    return Member(
+        id=member,
+        github=github,
+        display=policy.display or display or str(member),
+        mode=policy.mode,
+        autonomy=policy.autonomy,
+        latency_sec=policy.latency_sec,
+        wake=policy.wake,
+    )
 
 
 def load_members(root: Path) -> dict[MemberId, Member]:
-    raise NotImplementedError
+    members: dict[MemberId, Member] = {}
+    for member, (github, display) in load_room(root).roster.items():
+        path = who_path(root, member)
+        who = parse_who(path.read_text(encoding="utf-8")) if path.exists() else None
+        members[member] = merge_member(member, github, display, who)
+    return members
 
 
 def parse_ref(raw: str) -> EventRef:
-    raise NotImplementedError
+    return EventRef.parse(raw)
 
 
 def parse_line(writer: MemberId, seq: Seq, raw: str) -> Event:
